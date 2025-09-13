@@ -1,3 +1,8 @@
+<<<<<<< HEAD
 # Monkey自动化测试依赖包
 uiautomator2==2.16.0
 Jinja2==3.1.2
+=======
+ # Flask==1.1.2
+ # monkeys==0.1.0
+>>>>>>> bc185e8 (Monkey稳定性测试)
