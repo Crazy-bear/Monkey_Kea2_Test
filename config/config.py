@@ -8,9 +8,7 @@ import uiautomator2 as u2
 
 
 class Config:
-    # DEVICE_ID = "192.168.20.28:5555"  # 实验室设备 ID
-    # DEVICE_ID = "192.168.20.51:5555"  # 何老师设备 ID
-    # DEVICE_ID = "192.168.20.121:5555"  # 实验室设备 ID
+
     # DEVICE_ID = "1MRtest30KP103test"  # 设备 ID
     DEVICE_ID = "192.168.20.46:5555"  # 家彬设备 ID
     # DEVICE_ID = "1ef4a826"  # 手机设备 ID
