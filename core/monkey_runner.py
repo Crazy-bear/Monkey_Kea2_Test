@@ -14,6 +14,7 @@ import subprocess
 import re
 import uiautomator2 as u2
 import xml.etree.ElementTree as ET
+from config.logging_config import logger
 
 
 class MonkeyRunner:
@@ -21,39 +22,64 @@ class MonkeyRunner:
         self.adb_client = adb_client
         self.config = config
         self.d = u2.connect(config.DEVICE_ID)
+        # 初始化 LogcatHandler
+        from core.logcat_handler import LogcatHandler
+        self.logcat_handler = LogcatHandler(config)
 
     def run_monkey(self, monkey_log_file):
-        cmd = [
-            "adb", "-s", self.config.DEVICE_ID, "shell", "monkey",
-            "-p", self.config.PACKAGE_NAME,   # 应用包名
-            # "-c", "android.intent.category.LAUNCHER",  # 启动器类别
-            # "-c", ".activity.HealthListActivity",  # 启动器类别
-            "-s", str(self.config.SEED),    # 随机事件种子
-            "--throttle", "200",  # 每次事件之间的间隔（毫秒）
-            "--ignore-crashes",  # 忽略应用崩溃
-            "--ignore-timeouts",    # 忽略超时错误
-            "--pct-touch", "40",    # 触摸事件百分比
-            "--pct-motion", "60",   # 滑动事件百分比
-            "--pct-syskeys", "0",   # 系统按键事件百分比
-            "--monitor-native-crashes",  # 监控原生崩溃
-            # "--monitor-native-exceptions",  # 监控原生异常
-            # "--ignore-security-exceptions",  # 忽略安全异常
-            "-v -v -v",  # 详细日志
-            str(self.config.EVENT_COUNT),  # 事件数量
-        ]
-        # cmd = [str(arg) for arg in cmd]  # 确保 cmd 列表中的每个元素都是字符串
-        print(f"MonkeyRunner: {cmd}")
-        # return self.adb_client.run_command(cmd, monkey_log_file)
+        """
+        运行 Monkey 测试并实时解析日志
+        
+        Args:
+            monkey_log_file: 日志文件路径
+            
+        Returns:
+            None
+        """
+        try:
+            # 构建 Monkey 命令
+            cmd = [
+                "adb", "-s", self.config.DEVICE_ID, "shell", "monkey",
+                "-p", self.config.PACKAGE_NAME,   # 应用包名
+                "-s", str(self.config.SEED),    # 随机事件种子
+                "--throttle", "500",  # 每次事件之间的间隔（毫秒）
+                "--ignore-crashes",  # 忽略应用崩溃
+                "--ignore-timeouts",    # 忽略超时错误
+                "--pct-touch", "40",    # 触摸事件百分比
+                "--pct-motion", "60",   # 滑动事件百分比
+                "--pct-syskeys", "0",   # 系统按键事件百分比
+                "--monitor-native-crashes",  # 监控原生崩溃
+                # "--monitor-native-exceptions",  # 监控原生异常
+                # "--ignore-security-exceptions",  # 忽略安全异常
+                "-v", "-v", "-v",  # 详细日志（拆分为单独参数）
+                str(self.config.EVENT_COUNT),  # 事件数量
+            ]
+            
+            logger.info(f"MonkeyRunner: 执行命令: {' '.join(cmd)}")
 
-        # 使用 subprocess.Popen 实时读取日志
-        with open(monkey_log_file, "w", encoding="utf-8") as f:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            for line in iter(proc.stdout.readline, ''):
-                line = line.strip()
-                f.write(line + "\n")
+            # 使用 subprocess.Popen 实时读取日志
+            with open(monkey_log_file, "w", encoding="utf-8") as f:
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                for line in iter(proc.stdout.readline, ''):
+                    line = line.strip()
+                    f.write(line + "\n")
+                    f.flush()
+                    self.parse_monkey_event(line, f)
+                proc.wait()
+                
+                # 检查进程退出码
+                if proc.returncode != 0:
+                    logger.warning(f"Monkey 测试执行完成，退出码: {proc.returncode}")
+                    f.write(f"\nMonkey 测试执行完成，退出码: {proc.returncode}\n")
+                else:
+                    logger.info("Monkey 测试执行成功")
+                    f.write("\nMonkey 测试执行成功\n")
+                    
+        except Exception as e:
+            logger.error(f"执行 Monkey 测试时发生错误: {e}")
+            if 'f' in locals():
+                f.write(f"\n执行 Monkey 测试时发生错误: {e}\n")
                 f.flush()
-                self.parse_monkey_event(line, f)
-            proc.wait()
 
     def parse_monkey_event(self, line, log_file_handle):
         """
@@ -68,7 +94,7 @@ class MonkeyRunner:
             except Exception as e:
                 msg = f"[点击坐标 ({x},{y})] → UI解析异常: {e}"
 
-            print(msg)
+            # print(msg)  # 输出日志
             log_file_handle.write(msg + "\n")
             log_file_handle.flush()
 
@@ -107,7 +133,9 @@ class MonkeyRunner:
                         if depth > max_depth:
                             best_node_info = info
                             max_depth = depth
-                except:
+                except Exception as e:
+                    # 记录解析错误，但继续执行
+                    logger.debug(f"解析UI元素时发生错误: {e}")
                     pass
             for child in node:
                 traverse(child, depth + 1)
