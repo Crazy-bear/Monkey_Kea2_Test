@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monkey Test Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        .info-box {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .info-row {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .info-label {
+            font-weight: bold;
+            width: 150px;
+        }
+        .info-value {
+            flex: 1;
+        }
+        .details {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-failed {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .summary {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .summary-item {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex: 1;
+            margin: 0 10px;
+        }
+        .summary-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+        }
+        .summary-label {
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>Monkey 测试报告</h1>
+    
+    <div class="summary">
+        <div class="summary-item">
+            <div class="summary-value">{{ data.execution_count }}</div>
+            <div class="summary-label">执行事件数</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value">{{ data.crash_count }}</div>
+            <div class="summary-label">崩溃次数</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value">{{ data.duration }}</div>
+            <div class="summary-label">测试时长</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value">
+                {% if data.crash_count == 0 %}
+                <span class="status status-success">成功</span>
+                {% else %}
+                <span class="status status-failed">失败</span>
+                {% endif %}
+            </div>
+            <div class="summary-label">测试结果</div>
+        </div>
+    </div>
+    
+    <div class="info-box">
+        <h2>设备信息</h2>
+        <div class="info-row">
+            <div class="info-label">设备 ID:</div>
+            <div class="info-value">{{ data.device_id }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">应用包名:</div>
+            <div class="info-value">{{ data.package_name }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">应用版本:</div>
+            <div class="info-value">{{ data.device_version_name }}</div>
+        </div>
+    </div>
+    
+    <div class="info-box">
+        <h2>测试信息</h2>
+        <div class="info-row">
+            <div class="info-label">开始时间:</div>
+            <div class="info-value">{{ data.start_time }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">结束时间:</div>
+            <div class="info-value">{{ data.end_time }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">随机种子:</div>
+            <div class="info-value">{{ data.seed_value }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">事件数量:</div>
+            <div class="info-value">{{ data.execution_count }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">崩溃次数:</div>
+            <div class="info-value">{{ data.crash_count }}</div>
+        </div>
+    </div>
+    
+    {% if data.crashes %}
+    <div class="info-box">
+        <h2>崩溃信息</h2>
+        <div class="details">
+            {% for crash in data.crashes %}
+            {{ crash }}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="info-box">
+        <h2>测试详情</h2>
+        <div class="details">{{ data.details }}</div>
+    </div>
+</body>
+</html>
