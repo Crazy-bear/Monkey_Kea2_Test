@@ -36,18 +36,35 @@ class ReportGenerator:
             bool: 生成是否成功
         """
         try:
+            # 检查数据
+            print(f"报告数据包含log_analysis: {'log_analysis' in data}")
+            if 'log_analysis' in data:
+                print(f"log_analysis类型: {type(data['log_analysis'])}")
+                print(f"log_analysis内容: {data['log_analysis']}")
+            
             # 检查是否存在模板文件
             template_file = os.path.join(self.template_dir, "report_template.html")
+            print(f"模板文件路径: {template_file}")
+            print(f"模板文件存在: {os.path.exists(template_file)}")
             
             if os.path.exists(template_file):
                 # 使用外部模板文件
                 template = self.env.get_template("report_template.html")
+                print("使用外部模板文件")
             else:
                 # 使用内置模板
                 template = self._get_default_template()
+                print("使用内置模板")
             
             # 渲染模板
             rendered = template.render(data=data)
+            print(f"渲染成功，报告长度: {len(rendered)}")
+            
+            # 检查渲染结果
+            if '日志分析' in rendered:
+                print("报告中包含日志分析部分")
+            else:
+                print("报告中不包含日志分析部分")
             
             # 确保输出目录存在
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -60,6 +77,7 @@ class ReportGenerator:
             return True
         except Exception as e:
             logger.error(f"生成 HTML 报告失败: {e}")
+            print(f"生成 HTML 报告失败: {e}")
             return False
     
     def _get_default_template(self):
@@ -107,24 +125,35 @@ class ReportGenerator:
                 }
                 .info-row {
                     display: flex;
-                    margin-bottom: 10px;
+                    margin-bottom: 15px;
+                    align-items: flex-start;
                 }
                 .info-label {
                     font-weight: bold;
                     width: 150px;
+                    padding-top: 5px;
                 }
                 .info-value {
                     flex: 1;
+                    line-height: 1.6;
+                    padding: 5px 0;
                 }
                 .details {
                     background-color: white;
-                    padding: 20px;
+                    padding: 15px;
                     border-radius: 5px;
                     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                     white-space: pre-wrap;
                     font-family: monospace;
                     font-size: 14px;
                     line-height: 1.4;
+                }
+                .crash-categories-container {
+                    background-color: white;
+                    padding: 10px;
+                    border-radius: 5px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
                 }
                 .status {
                     display: inline-block;
@@ -163,7 +192,61 @@ class ReportGenerator:
                     font-size: 14px;
                     color: #666;
                 }
+                .crash-category {
+                    margin-bottom: 3px;
+                }
+                .category-header {
+                    cursor: pointer;
+                    padding: 6px 8px;
+                    background-color: #f0f0f0;
+                    border-radius: 3px;
+                    margin-bottom: 0;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .category-header:hover {
+                    background-color: #e0e0e0;
+                }
+                .toggle-icon {
+                    transition: transform 0.3s;
+                    font-size: 12px;
+                }
+                .toggle-icon.collapsed {
+                    transform: rotate(-90deg);
+                }
+                .crash-details {
+                    margin-left: 15px;
+                    margin-top: 0;
+                    padding: 8px;
+                    background-color: #f9f9f9;
+                    border-radius: 0 0 3px 3px;
+                    border-top: 1px solid #e0e0e0;
+                }
+                .crash-item {
+                    padding: 2px 0;
+                    border-bottom: 1px solid #f0f0f0;
+                    font-size: 14px;
+                }
+                .crash-item:last-child {
+                    border-bottom: none;
+                }
             </style>
+            <script>
+                function toggleCrashDetails(categoryId) {
+                    const details = document.getElementById(categoryId);
+                    const header = details.previousElementSibling;
+                    const icon = header.querySelector('.toggle-icon');
+                    
+                    if (details.style.display === 'none') {
+                        details.style.display = 'block';
+                        icon.classList.remove('collapsed');
+                    } else {
+                        details.style.display = 'none';
+                        icon.classList.add('collapsed');
+                    }
+                }
+            </script>
         </head>
         <body>
             <h1>Monkey 测试报告</h1>
@@ -233,21 +316,147 @@ class ReportGenerator:
                 </div>
             </div>
             
-            {% if data.crashes %}
+            {% if data.log_analysis %}
             <div class="info-box">
-                <h2>崩溃信息</h2>
-                <div class="details">
-                    {% for crash in data.crashes %}
-                    {{ crash }}
+                <h2>日志分析</h2>
+                {% if data.log_analysis.crash_categories %}
+                <h3>崩溃分类</h3>
+                <div class="crash-categories-container">
+                    {% for category, count in data.log_analysis.crash_categories.items() %}
+                    <div class="crash-category">
+                        <div class="category-header" onclick="toggleCrashDetails('{{ category | replace(' ', '_') }}')">
+                            <strong>{{ category }}: {{ count }}次</strong> <span class="toggle-icon">▼</span>
+                        </div>
+                        <div id="{{ category | replace(' ', '_') }}" class="crash-details" style="display: none;">
+                            {% for crash in data.log_analysis.crash_details %}
+                            {% if crash.category == category %}
+                            <div class="crash-item">{{ crash.message | default('无') }}</div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
                     {% endfor %}
+                </div>
+                {% endif %}
+                
+                <div class="info-row">
+                    <div class="info-label">分析结论:</div>
+                    <div class="info-value">{{ data.log_analysis.analysis_conclusion | default('无') | replace('\n', '<br>') | safe }}</div>
+                </div>
+            </div>
+            {% else %}
+            <div class="info-box">
+                <h2>日志分析</h2>
+                <div class="info-row">
+                    <div class="info-label">分析结论:</div>
+                    <div class="info-value">日志分析未执行</div>
                 </div>
             </div>
             {% endif %}
             
+            {% if data.performance_data %}
             <div class="info-box">
-                <h2>测试详情</h2>
-                <div class="details">{{ data.details }}</div>
+                <h2>性能数据</h2>
+                <h3>性能趋势</h3>
+                <div class="info-row">
+                    <div class="info-value">
+                        <canvas id="performanceChart" width="100%" height="400"></canvas>
+                    </div>
+                </div>
+                <h3>性能统计</h3>
+                <div class="info-row">
+                    <div class="info-label">平均CPU使用率:</div>
+                    <div class="info-value">
+                        {% if data.performance_data %}
+                        {{ "%.2f" | format((data.performance_data | map(attribute='cpu') | sum) / data.performance_data | length) }}%
+                        {% else %}
+                        无数据
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">平均内存使用量:</div>
+                    <div class="info-value">
+                        {% if data.performance_data %}
+                        {{ "%.2f" | format((data.performance_data | map(attribute='mem') | sum) / data.performance_data | length) }} MB
+                        {% else %}
+                        无数据
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">平均FPS:</div>
+                    <div class="info-value">
+                        {% if data.performance_data %}
+                        {{ "%.2f" | format((data.performance_data | map(attribute='fps') | sum) / data.performance_data | length) }}
+                        {% else %}
+                        无数据
+                        {% endif %}
+                    </div>
+                </div>
             </div>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
+                // 准备性能数据
+                const performanceData = {{ data.performance_data | tojson | safe }};
+                
+                // 提取数据
+                const labels = performanceData.map(item => item.timestamp);
+                const cpuData = performanceData.map(item => item.cpu);
+                const memData = performanceData.map(item => item.mem);
+                const fpsData = performanceData.map(item => item.fps);
+                
+                // 创建图表
+                const ctx = document.getElementById('performanceChart').getContext('2d');
+                const chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'CPU使用率 (%)',
+                                data: cpuData,
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                                tension: 0.1
+                            },
+                            {
+                                label: '内存使用量 (MB)',
+                                data: memData,
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                                tension: 0.1
+                            },
+                            {
+                                label: 'FPS',
+                                data: fpsData,
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                                tension: 0.1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            </script>
+            {% else %}
+            <div class="info-box">
+                <h2>性能数据</h2>
+                <div class="info-row">
+                    <div class="info-label">状态:</div>
+                    <div class="info-value">性能数据未采集</div>
+                </div>
+            </div>
+            {% endif %}
+
         </body>
         </html>
         """
