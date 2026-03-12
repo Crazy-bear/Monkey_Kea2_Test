@@ -60,6 +60,7 @@ Monkey是一个开源的自动化测试工具，它可以模拟用户的操作�
 │   ├── memory.py              # 内存监控
 │   └── monitor.py             # 性能监控主模块
 │
+<<<<<<< HEAD
 ├── outputs/                   # 测试输出（日志和报告）
 │   ├── logs/                  # 保存 logcat 和测试日志
 │   ├── reports/               # 保存 HTML 或其他格式的测试报告
@@ -78,6 +79,13 @@ Monkey是一个开源的自动化测试工具，它可以模拟用户的操作�
 =======
 ├── test_performance.py        # 性能测试脚本
 >>>>>>> a8c8655 (feat: 添加性能监控模块并优化日志处理)
+=======
+├── docs/                      # 项目文档
+│   ├── issues_solutions.md    # 项目问题和解决方案文档
+│   └── iteration_process.md   # 项目迭代过程文档
+│
+├── main.py                    # 主入口文件
+>>>>>>> c9e2aac (chore: 更新项目文档和结构调整)
 ├── README.md                  # 项目说明文档
 └── requirements.txt           # Python 依赖包
 
@@ -95,7 +103,7 @@ Monkey是一个开源的自动化测试工具，它可以模拟用户的操作�
 - 性能监控（CPU、内存、FPS）
 
 ## 项目周期
-- 2025年1月10日-2026年3月10日
+- 2025年1月10日-2026年3月12日
 
 ## 快速开始
 ### 1. 环境准备
@@ -131,17 +139,6 @@ python main.py --device 192.168.20.152:5555 --package com.example.app --events 1
 - `--events`：事件数量（可选，默认使用config.py中的配置）
 - `--output`：输出目录（可选，默认"outputs"）
 - `--format`：报告格式（可选，默认"html"，支持"json"）
-
-### 5. 运行性能测试
-使用性能测试脚本运行性能监控：
-```bash
-python test_performance.py --device 192.168.20.152:5555 --package com.example.app --duration 60
-```
-
-**参数说明**：
-- `--device`：设备ID
-- `--package`：应用包名
-- `--duration`：测试持续时间（秒）
 
 ## 配置说明
 ### 环境变量
@@ -183,7 +180,7 @@ python test_performance.py --device 192.168.20.152:5555 --package com.example.ap
 ### 4. 性能监控问题
 - 确保应用正在运行
 - 检查应用包名是否正确
-- 查看 `test_performance_output/` 目录下的性能数据
+- 查看性能数据报告
 
 ## 优化特点
 - **统一配置管理**：支持环境变量和配置文件双重配置
