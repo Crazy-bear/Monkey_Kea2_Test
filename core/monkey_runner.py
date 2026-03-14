@@ -17,7 +17,10 @@ import xml.etree.ElementTree as ET
 import os
 import time
 from config.logging_config import logger
-from core.utils import get_timestamp
+from core.utils import get_timestamp, LogRotator
+
+# 每 N 个事件解析一次 UI（降低 CPU/ADB 负载），0 表示不解析
+PARSE_UI_INTERVAL = 10
 
 
 class MonkeyRunner:
@@ -29,121 +32,48 @@ class MonkeyRunner:
         from core.logcat_handler import LogcatHandler
         self.logcat_handler = LogcatHandler(config)
 
-    def run_monkey(self, monkey_log_file, max_bytes=10 * 1024 * 1024):
+    def run_monkey(self, monkey_log_file, max_bytes=10 * 1024 * 1024, parse_ui_interval=None):
         """
-        运行 Monkey 测试并实时解析日志，支持日志轮转
-        
+        运行 Monkey 测试并实时解析日志，支持日志轮转。
+
         Args:
             monkey_log_file: 日志文件路径
             max_bytes: 日志文件最大大小，默认10MB
-            
-        Returns:
-            None
+            parse_ui_interval: 每 N 个事件解析一次 UI（0 表示不解析），默认使用 PARSE_UI_INTERVAL
         """
+        if parse_ui_interval is None:
+            parse_ui_interval = getattr(self.config, 'PARSE_UI_INTERVAL', PARSE_UI_INTERVAL)
+        rotator = None
         try:
-            # 创建日志轮转处理器
-            class LogRotator:
-                def __init__(self, file_path, max_size):
-                    self.file_path = file_path
-                    self.max_size = max_size
-                    self.file = open(file_path, "w", encoding="utf-8")
-                    self.closed = False
-                    self.last_rotate_time = 0
-                
-                def write(self, data):
-                    if self.closed:
-                        return
-                    try:
-                        # 检查文件大小
-                        self.file.write(data)
-                        self.file.flush()
-                        
-                        # 检查是否需要轮转（增加时间间隔，避免频繁轮转）
-                        current_time = time.time()
-                        if current_time - self.last_rotate_time > 600:  # 每10分钟轮转一次
-                            self.file.seek(0, os.SEEK_END)
-                            if self.file.tell() > self.max_size:
-                                self._rotate()
-                                self.last_rotate_time = current_time
-                    except Exception as e:
-                        logger.error(f"日志写入失败: {e}")
-                
-                def _rotate(self):
-                    if self.closed:
-                        return
-                    try:
-                        # 关闭当前文件
-                        self.file.close()
-                        
-                        # 生成带时间戳的新文件名
-                        base, ext = os.path.splitext(self.file_path)
-                        timestamp = get_timestamp()
-                        new_filename = f"{base}_{timestamp}{ext}"
-                        
-                        # 重命名当前日志文件
-                        if os.path.exists(self.file_path):
-                            os.rename(self.file_path, new_filename)
-                            logger.info(f"Monkey日志文件已轮转: {new_filename}")
-                        
-                        # 重新打开日志文件
-                        self.file = open(self.file_path, "w", encoding="utf-8")
-                    except Exception as e:
-                        logger.error(f"日志轮转失败: {e}")
-                        # 尝试重新打开文件
-                        try:
-                            self.file = open(self.file_path, "w", encoding="utf-8")
-                        except:
-                            pass
-                
-                def close(self):
-                    if not self.closed and self.file:
-                        try:
-                            self.file.close()
-                        except:
-                            pass
-                        self.closed = True
-            
-            # 构建 Monkey 命令
             cmd = [
                 "adb", "-s", self.config.DEVICE_ID, "shell", "monkey",
-                "-p", self.config.PACKAGE_NAME,   # 应用包名
-                "-s", str(self.config.SEED),    # 随机事件种子
-                "--throttle", "500",  # 每次事件之间的间隔（毫秒）
-                "--pct-touch", "40",    # 触摸事件百分比
-                "--pct-motion", "60",   # 滑动事件百分比
-                "--pct-syskeys", "0",   # 系统按键事件百分比
-                "--ignore-crashes",  # 忽略应用崩溃
-                "--ignore-timeouts",    # 忽略超时错误
-                "--monitor-native-crashes",  # 监控原生崩溃
-                "-v", "-v", "-v",  # 详细日志（拆分为单独参数）
-                str(self.config.EVENT_COUNT),  # 事件数量
+                "-p", self.config.PACKAGE_NAME,
+                "-s", str(self.config.SEED),
+                "--throttle", "500",
+                "--pct-touch", "40", "--pct-motion", "60", "--pct-syskeys", "0",
+                "--ignore-crashes", "--ignore-timeouts", "--monitor-native-crashes",
+                "-v", "-v", "-v",
+                str(self.config.EVENT_COUNT),
             ]
-            
             logger.info(f"MonkeyRunner: 执行命令: {' '.join(cmd)}")
-
-            # 创建日志轮转对象
             rotator = LogRotator(monkey_log_file, max_bytes)
-            
-            # 使用 subprocess.Popen 实时读取日志
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            throttle = 0.5  # throttle延迟（秒），与--throttle 500对应
+
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=False)
+            event_count = 0
             try:
-                # 读取所有输出
                 while True:
                     line = proc.stdout.readline()
                     if not line:
                         break
                     line = line.strip()
                     rotator.write(line + "\n")
-                    # 检测到事件时添加延迟（因为--throttle在该设备上可能不生效）
+                    do_parse = parse_ui_interval > 0 and (event_count % parse_ui_interval == 0)
+                    if do_parse:
+                        self.parse_monkey_event(line, rotator)
                     if "Sending" in line:
-                        time.sleep(throttle)
-                    self.parse_monkey_event(line, rotator)
-                
-                # 确保等待进程完全结束
-                proc.wait(timeout=300)  # 5分钟超时
-                
-                # 检查进程退出码
+                        event_count += 1
+
+                proc.wait(timeout=300)
                 if proc.returncode != 0:
                     logger.warning(f"Monkey 测试执行完成，退出码: {proc.returncode}")
                     rotator.write(f"\nMonkey 测试执行完成，退出码: {proc.returncode}\n")
@@ -156,16 +86,18 @@ class MonkeyRunner:
                 proc.terminate()
                 try:
                     proc.wait(timeout=10)
-                except:
+                except Exception:
                     pass
             finally:
                 rotator.close()
-                    
         except Exception as e:
             logger.error(f"执行 Monkey 测试时发生错误: {e}")
-            if 'rotator' in locals():
-                rotator.write(f"\n执行 Monkey 测试时发生错误: {e}\n")
-                rotator.close()
+            if rotator is not None:
+                try:
+                    rotator.write(f"\n执行 Monkey 测试时发生错误: {e}\n")
+                    rotator.close()
+                except Exception:
+                    pass
 
     def parse_monkey_event(self, line, log_file_handle):
         """

@@ -5,6 +5,8 @@
 """
 
 import os
+import base64
+import io
 from jinja2 import Template, FileSystemLoader, Environment
 from config.logging_config import logger
 
@@ -35,49 +37,104 @@ class ReportGenerator:
             bool: 生成是否成功
         """
         try:
-            # 检查数据
-            print(f"报告数据包含log_analysis: {'log_analysis' in data}")
-            if 'log_analysis' in data:
-                print(f"log_analysis类型: {type(data['log_analysis'])}")
-                print(f"log_analysis内容: {data['log_analysis']}")
-            
-            # 检查是否存在模板文件
+            data = dict(data)
+            if data.get("performance_data") is not None:
+                data["performance_data"] = self._normalize_performance_data(data["performance_data"])
+            if data.get("performance_data"):
+                data["performance_chart_png_base64"] = self._build_performance_chart_png_base64(
+                    data["performance_data"]
+                )
+            else:
+                data["performance_chart_png_base64"] = None
+
             template_file = os.path.join(self.template_dir, "report_template.html")
-            print(f"模板文件路径: {template_file}")
-            print(f"模板文件存在: {os.path.exists(template_file)}")
-            
             if os.path.exists(template_file):
-                # 使用外部模板文件
                 template = self.env.get_template("report_template.html")
-                print("使用外部模板文件")
             else:
-                # 使用内置模板
                 template = self._get_default_template()
-                print("使用内置模板")
-            
-            # 渲染模板
+
             rendered = template.render(data=data)
-            print(f"渲染成功，报告长度: {len(rendered)}")
-            
-            # 检查渲染结果
-            if '日志分析' in rendered:
-                print("报告中包含日志分析部分")
-            else:
-                print("报告中不包含日志分析部分")
-            
-            # 确保输出目录存在
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
-            
-            # 写入文件
             with open(output_file, "w", encoding="utf-8") as file:
                 file.write(rendered)
-            
             logger.info(f"HTML 报告已生成: {output_file}")
             return True
         except Exception as e:
             logger.error(f"生成 HTML 报告失败: {e}")
-            print(f"生成 HTML 报告失败: {e}")
             return False
+
+    def _normalize_performance_data(self, performance_data):
+        """
+        将性能数据规范为 list of dict，每项含 timestamp, cpu, mem, fps。
+        空或非法则返回 None，便于模板统一判断。
+        """
+        if performance_data is None:
+            return None
+        if not isinstance(performance_data, list):
+            return None
+        result = []
+        for item in performance_data:
+            if not isinstance(item, dict):
+                continue
+            result.append({
+                "timestamp": item.get("timestamp", ""),
+                "cpu": float(item.get("cpu", 0) or 0),
+                "mem": float(item.get("mem", 0) or 0),
+                "fps": float(item.get("fps", 0) or 0),
+            })
+        return result if result else None
+
+    def _build_performance_chart_png_base64(self, performance_data):
+        """
+        使用 matplotlib 生成性能趋势图并以内嵌 base64 PNG 形式返回。
+        这样在 Jenkins（CSP/sandbox 禁止脚本/外链）中也能显示图表。
+        """
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+        except Exception as e:
+            logger.warning(f"matplotlib 不可用，跳过性能图生成: {e}")
+            return None
+
+        if not performance_data:
+            return None
+
+        try:
+            labels = [str(i.get("timestamp", "")) for i in performance_data]
+            cpu = [float(i.get("cpu", 0) or 0) for i in performance_data]
+            mem = [float(i.get("mem", 0) or 0) for i in performance_data]
+            fps = [float(i.get("fps", 0) or 0) for i in performance_data]
+
+            fig, ax1 = plt.subplots(figsize=(10, 4), dpi=120)
+            ax1.plot(cpu, color="#ff6384", linewidth=1.5, label="CPU(%)")
+            ax1.plot(mem, color="#36a2eb", linewidth=1.5, label="Mem(MB)")
+            ax1.set_ylabel("CPU / Mem")
+            ax1.grid(True, alpha=0.25)
+
+            ax2 = ax1.twinx()
+            ax2.plot(fps, color="#4bc0c0", linewidth=1.5, label="FPS")
+            ax2.set_ylabel("FPS")
+
+            # x 轴标签过密时抽样显示
+            if labels:
+                step = max(1, len(labels) // 8)
+                ax1.set_xticks(list(range(0, len(labels), step)))
+                ax1.set_xticklabels([labels[i] for i in range(0, len(labels), step)], rotation=20, ha="right")
+
+            lines1, labels1 = ax1.get_legend_handles_labels()
+            lines2, labels2 = ax2.get_legend_handles_labels()
+            ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left", fontsize=8)
+
+            fig.tight_layout()
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png")
+            plt.close(fig)
+            buf.seek(0)
+            return base64.b64encode(buf.read()).decode("ascii")
+        except Exception as e:
+            logger.error(f"生成性能图失败: {e}")
+            return None
     
     def _get_default_template(self):
         """
@@ -247,23 +304,23 @@ class ReportGenerator:
                 }
             </script>
         </head>
-        <body>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px; background-color: #f4f4f4;">
             <h1>Monkey 测试报告</h1>
             
-            <div class="summary">
-                <div class="summary-item">
+            <div class="summary" style="display:flex; justify-content: space-around; margin: 20px 0; flex-wrap: wrap; gap: 10px;">
+                <div class="summary-item" style="text-align:center; background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); flex:1; min-width: 180px;">
                     <div class="summary-value">{{ data.execution_count }}</div>
                     <div class="summary-label">执行事件数</div>
                 </div>
-                <div class="summary-item">
+                <div class="summary-item" style="text-align:center; background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); flex:1; min-width: 180px;">
                     <div class="summary-value">{{ data.crash_count }}</div>
                     <div class="summary-label">崩溃次数</div>
                 </div>
-                <div class="summary-item">
+                <div class="summary-item" style="text-align:center; background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); flex:1; min-width: 180px;">
                     <div class="summary-value">{{ data.duration }}</div>
                     <div class="summary-label">测试时长</div>
                 </div>
-                <div class="summary-item">
+                <div class="summary-item" style="text-align:center; background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); flex:1; min-width: 180px;">
                     <div class="summary-value">
                         {% if data.crash_count == 0 %}
                         <span class="status status-success">成功</span>
@@ -275,7 +332,7 @@ class ReportGenerator:
                 </div>
             </div>
             
-            <div class="info-box">
+            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
                 <h2>设备信息</h2>
                 <div class="info-row">
                     <div class="info-label">设备 ID:</div>
@@ -291,7 +348,7 @@ class ReportGenerator:
                 </div>
             </div>
             
-            <div class="info-box">
+            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
                 <h2>测试信息</h2>
                 <div class="info-row">
                     <div class="info-label">开始时间:</div>
@@ -316,7 +373,7 @@ class ReportGenerator:
             </div>
             
             {% if data.log_analysis %}
-            <div class="info-box">
+            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
                 <h2>日志分析</h2>
                 {% if data.log_analysis.crash_categories %}
                 <h3>崩溃分类</h3>
@@ -344,7 +401,7 @@ class ReportGenerator:
                 </div>
             </div>
             {% else %}
-            <div class="info-box">
+            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
                 <h2>日志分析</h2>
                 <div class="info-row">
                     <div class="info-label">分析结论:</div>
@@ -354,20 +411,24 @@ class ReportGenerator:
             {% endif %}
             
             {% if data.performance_data %}
-            <div class="info-box">
+            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
                 <h2>性能数据</h2>
                 <h3>性能趋势</h3>
                 <div class="info-row">
                     <div class="info-value">
-                        <canvas id="performanceChart" width="100%" height="400"></canvas>
+                        {% if data.performance_chart_png_base64 %}
+                        <img alt="performance chart" style="width:100%; max-height:420px; object-fit:contain; border:1px solid #eee; border-radius:4px; background:#fff;" src="data:image/png;base64,{{ data.performance_chart_png_base64 }}" />
+                        {% else %}
+                        <div style="color:#666;">性能趋势图未生成（可能是 Jenkins/CSP 禁止脚本，或未安装 matplotlib）。</div>
+                        {% endif %}
                     </div>
                 </div>
                 <h3>性能统计</h3>
                 <div class="info-row">
                     <div class="info-label">平均CPU使用率:</div>
                     <div class="info-value">
-                        {% if data.performance_data %}
-                        {{ "%.2f" | format((data.performance_data | map(attribute='cpu') | sum) / data.performance_data | length) }}%
+                        {% if data.performance_data and (data.performance_data | length) > 0 %}
+                        {{ "%.2f" | format((data.performance_data | map(attribute='cpu') | sum) / (data.performance_data | length)) }}%
                         {% else %}
                         无数据
                         {% endif %}
@@ -376,8 +437,8 @@ class ReportGenerator:
                 <div class="info-row">
                     <div class="info-label">平均内存使用量:</div>
                     <div class="info-value">
-                        {% if data.performance_data %}
-                        {{ "%.2f" | format((data.performance_data | map(attribute='mem') | sum) / data.performance_data | length) }} MB
+                        {% if data.performance_data and (data.performance_data | length) > 0 %}
+                        {{ "%.2f" | format((data.performance_data | map(attribute='mem') | sum) / (data.performance_data | length)) }} MB
                         {% else %}
                         无数据
                         {% endif %}
@@ -386,68 +447,16 @@ class ReportGenerator:
                 <div class="info-row">
                     <div class="info-label">平均FPS:</div>
                     <div class="info-value">
-                        {% if data.performance_data %}
-                        {{ "%.2f" | format((data.performance_data | map(attribute='fps') | sum) / data.performance_data | length) }}
+                        {% if data.performance_data and (data.performance_data | length) > 0 %}
+                        {{ "%.2f" | format((data.performance_data | map(attribute='fps') | sum) / (data.performance_data | length)) }}
                         {% else %}
                         无数据
                         {% endif %}
                     </div>
                 </div>
             </div>
-            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-            <script>
-                // 准备性能数据
-                const performanceData = {{ data.performance_data | tojson | safe }};
-                
-                // 提取数据
-                const labels = performanceData.map(item => item.timestamp);
-                const cpuData = performanceData.map(item => item.cpu);
-                const memData = performanceData.map(item => item.mem);
-                const fpsData = performanceData.map(item => item.fps);
-                
-                // 创建图表
-                const ctx = document.getElementById('performanceChart').getContext('2d');
-                const chart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [
-                            {
-                                label: 'CPU使用率 (%)',
-                                data: cpuData,
-                                borderColor: 'rgba(255, 99, 132, 1)',
-                                backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                                tension: 0.1
-                            },
-                            {
-                                label: '内存使用量 (MB)',
-                                data: memData,
-                                borderColor: 'rgba(54, 162, 235, 1)',
-                                backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                                tension: 0.1
-                            },
-                            {
-                                label: 'FPS',
-                                data: fpsData,
-                                borderColor: 'rgba(75, 192, 192, 1)',
-                                backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                                tension: 0.1
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            y: {
-                                beginAtZero: true
-                            }
-                        }
-                    }
-                });
-            </script>
             {% else %}
-            <div class="info-box">
+            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
                 <h2>性能数据</h2>
                 <div class="info-row">
                     <div class="info-label">状态:</div>
@@ -490,18 +499,11 @@ class ReportGenerator:
     
     def generate_report(self, data, output_file, format="html"):
         """
-        生成测试报告
-        
-        Args:
-            data: 测试数据
-            output_file: 输出文件路径
-            format: 报告格式，支持 html 和 json
-            
-        Returns:
-            bool: 生成是否成功
+        生成测试报告。会先规范化 performance_data。
         """
+        data = dict(data)
+        data["performance_data"] = self._normalize_performance_data(data.get("performance_data"))
         if format.lower() == "json":
             return self.generate_json_report(data, output_file)
-        else:
-            return self.generate_html_report(data, output_file)
+        return self.generate_html_report(data, output_file)
 

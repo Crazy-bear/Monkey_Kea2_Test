@@ -18,7 +18,7 @@ Monkey是一个开源的自动化测试工具，它可以模拟用户的操作�
 - 实现Monkey自动化测试脚本，并通过测试用例验证稳定性，发现bug并修复
 - 优化脚本，提升测试效率
 - 提供详细的测试报告和崩溃分析
-- 支持多设备并行测试
+- 支持多设备配置；当前为单设备顺序执行（多设备并行可后续扩展）
 - 集成性能监控功能，实时监测应用的CPU、内存和FPS
 
 ## 代码目录结构
@@ -99,18 +99,37 @@ python main.py --device 192.168.20.152:5555 --package com.example.app --events 1
 ```
 
 **参数说明**：
-- `--device`：设备ID（可选，默认使用config.py中的配置）
-- `--package`：应用包名（可选，默认使用config.py中的配置）
-- `--events`：事件数量（可选，默认使用config.py中的配置）
-- `--output`：输出目录（可选，默认"outputs"）
-- `--format`：报告格式（可选，默认"html"，支持"json"）
+- `--device`：设备ID（可选，默认使用 config.py / 环境变量）
+- `--package`：应用包名（可选）
+- `--events`：事件数量（可选）
+- `--output`：输出目录（可选，默认 `outputs`）
+- `--format`：报告格式（可选，默认 `html`，支持 `json`）
+- `--validate-only`：仅校验配置后退出，不连接设备（适用于 CI/Jenkins）
+- `--report-only DIR`：从指定目录根据已有 logcat.log 等生成报告，不执行 Monkey
+- `--report-output FILE`：与 `--report-only` 配合，指定报告输出路径
+
+### 5. Jenkins / CI 集成
+- **仅校验配置**（无需设备，用于检查参数或流水线配置）：
+  ```bash
+  python main.py --validate-only
+  ```
+- **仅生成报告**（根据已有输出目录补生成报告）：
+  ```bash
+  python main.py --report-only outputs/20250101_120000 --format html --report-output report.html
+  ```
+- **运行单元测试**（无需设备）：
+  ```bash
+  pip install -r requirements.txt
+  pytest tests/ -v
+  ```
+- 建议在 Jenkins 中先执行 `python main.py --validate-only` 或 `pytest tests/`，再在有设备的节点上执行完整 Monkey 测试。
 
 ## 配置说明
 ### 环境变量
 可以通过环境变量覆盖默认配置：
 - `MONKEY_DEVICE_ID`：设备ID
-- `MONKEY_COUNT`：事件数量
-- `MONKEY_THROTTLE`：事件间隔
+- `MONKEY_PACKAGE_NAME`：应用包名
+- `MONKEY_EVENT_COUNT`：事件数量
 
 ### 配置文件
 也可以在 `config/config.py` 中直接修改默认配置。

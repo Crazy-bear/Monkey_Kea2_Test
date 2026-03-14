@@ -1,3 +1,9 @@
-# Monkey自动化测试依赖包
+# Monkey 自动化测试依赖包
 uiautomator2==2.16.0
 Jinja2==3.1.2
+
+# 测试（CI/Jenkins）
+pytest>=7.0.0
+
+# 报告图表（避免 Jenkins 阻断脚本/外链）
+matplotlib>=3.5.0

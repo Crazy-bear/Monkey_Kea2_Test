@@ -1,0 +1,65 @@
+// Jenkins 流水线示例：Monkey 自动化测试
+// 使用方法：复制为 Jenkinsfile 或按需修改
+// 要求：Jenkins 节点已安装 Python 3.7+、ADB（执行完整测试时需连接设备）
+
+pipeline {
+    agent any
+    environment {
+        MONKEY_DEVICE_ID = "${params.DEVICE_ID ?: ''}"
+        MONKEY_PACKAGE_NAME = "${params.PACKAGE_NAME ?: 'com.aeke.fitnessmirror'}"
+        MONKEY_EVENT_COUNT = "${params.EVENT_COUNT ?: '300'}"
+    }
+    parameters {
+        string(name: 'DEVICE_ID', defaultValue: '192.168.20.81:5555', description: '设备 ID')
+        string(name: 'PACKAGE_NAME', defaultValue: 'com.aeke.fitnessmirror', description: '应用包名')
+        string(name: 'EVENT_COUNT', defaultValue: '300', description: 'Monkey 事件数')
+        booleanParam(name: 'SKIP_FULL_TEST', defaultValue: true, description: '仅做校验与单元测试（不跑 Monkey）')
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Install') {
+            steps {
+                sh 'pip install -r requirements.txt'
+            }
+        }
+        stage('Validate Config') {
+            steps {
+                sh 'python main.py --validate-only'
+            }
+        }
+        stage('Unit Tests') {
+            steps {
+                sh 'pytest tests/ -v --tb=short'
+            }
+        }
+        stage('Monkey Test') {
+            when {
+                expression { return !params.SKIP_FULL_TEST }
+            }
+            steps {
+                sh "python main.py --device ${params.DEVICE_ID} --package ${params.PACKAGE_NAME} --events ${params.EVENT_COUNT} --output outputs --format html"
+            }
+            post {
+                always {
+                    publishHTML([
+                        allowMissing: true,
+                        reportDir: 'outputs',
+                        reportFiles: '**/report.html',
+                        reportName: 'Monkey Report',
+                        reportTitles: ''
+                    ])
+                    archiveArtifacts artifacts: 'outputs/**', allowEmptyArchive: true
+                }
+            }
+        }
+    }
+    post {
+        always {
+            cleanWs(deleteDirs: true, patterns: [[pattern: '.venv/**', type: 'INCLUDE']])
+        }
+    }
+}

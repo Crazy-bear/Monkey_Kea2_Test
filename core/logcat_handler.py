@@ -9,7 +9,7 @@ import threading
 import time
 import os
 from config.logging_config import logger
-from core.utils import get_timestamp
+from core.utils import LogRotator
 
 
 class LogcatHandler:
@@ -45,79 +45,16 @@ class LogcatHandler:
             cmd.extend(["-b", buffer])
         
         try:
-            # 创建日志轮转处理器
-            class LogRotator:
-                def __init__(self, file_path, max_size):
-                    self.file_path = file_path
-                    self.max_size = max_size
-                    self.file = open(file_path, "w", encoding="utf-8")
-                    self.closed = False
-                    self.last_rotate_time = 0
-                
-                def write(self, data):
-                    if self.closed:
-                        return
-                    try:
-                        # 检查文件大小
-                        self.file.write(data)
-                        self.file.flush()
-                        
-                        # 检查是否需要轮转（增加时间间隔，避免频繁轮转）
-                        current_time = time.time()
-                        if current_time - self.last_rotate_time > 600:  # 每10分钟轮转一次
-                            self.file.seek(0, os.SEEK_END)
-                            if self.file.tell() > self.max_size:
-                                self._rotate()
-                                self.last_rotate_time = current_time
-                    except Exception as e:
-                        logger.error(f"日志写入失败: {e}")
-                
-                def _rotate(self):
-                    if self.closed:
-                        return
-                    try:
-                        # 关闭当前文件
-                        self.file.close()
-                        
-                        # 生成带时间戳的新文件名
-                        base, ext = os.path.splitext(self.file_path)
-                        timestamp = get_timestamp()
-                        new_filename = f"{base}_{timestamp}{ext}"
-                        
-                        # 重命名当前日志文件
-                        if os.path.exists(self.file_path):
-                            os.rename(self.file_path, new_filename)
-                            logger.info(f"日志文件已轮转: {new_filename}")
-                        
-                        # 重新打开日志文件
-                        self.file = open(self.file_path, "w", encoding="utf-8")
-                    except Exception as e:
-                        logger.error(f"日志轮转失败: {e}")
-                        # 尝试重新打开文件
-                        try:
-                            self.file = open(self.file_path, "w", encoding="utf-8")
-                        except:
-                            pass
-                
-                def close(self):
-                    if not self.closed and self.file:
-                        try:
-                            self.file.close()
-                        except:
-                            pass
-                        self.closed = True
-            
-            # 创建日志轮转对象
             rotator = LogRotator(output_file, max_bytes)
-            
-            # 启动子进程并处理输出
+
             process = subprocess.Popen(
                 cmd,
+                shell=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 encoding="utf-8",
-                errors="ignore"
+                errors="ignore",
             )
             
             # 启动线程处理输出

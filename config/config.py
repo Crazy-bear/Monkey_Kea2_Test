@@ -15,7 +15,7 @@ class Config:
     支持从环境变量、配置文件和默认值读取配置
     """
     # 默认配置
-    DEFAULT_DEVICE_ID = "192.168.20.81:5555"  # 默认手机设备 ID
+    DEFAULT_DEVICE_ID = "192.168.20.180:5555"  # 默认手机设备 ID
     DEFAULT_PACKAGE_NAME = "com.aeke.fitnessmirror"  # 设备端测试应用包名
     DEFAULT_EVENT_COUNT = 300  # 默认事件数量
     
@@ -40,31 +40,49 @@ class Config:
     
     def __init__(self):
         """
-        初始化配置，获取应用信息
+        初始化配置。应用版本信息懒加载，避免无设备时阻塞启动。
         """
-        self.device_version_name = None
-        self._get_app_info()
-    
+        self.device_version_name = None  # 首次访问 DeviceVersionName 时再拉取
+
     def _get_app_info(self):
         """
-        获取应用信息
+        获取应用信息（懒加载，仅在有设备时调用）
         """
         try:
             import uiautomator2 as u2
-            d = u2.connect(self.DEVICE_ID)  # 连接设备
+            d = u2.connect(self.DEVICE_ID)
             device_info = d.app_info(self.PACKAGE_NAME)
-            self.device_version_name = device_info.get('versionName')
+            self.device_version_name = device_info.get('versionName') or "Unknown"
             logger.info(f"DeviceVersionName: {self.device_version_name}")
         except Exception as e:
             logger.error(f"获取应用信息失败: {e}")
             self.device_version_name = "Unknown"
-    
+
     @property
     def DeviceVersionName(self):
         """
-        获取设备版本名称
+        获取设备版本名称（懒加载）
         """
         if self.device_version_name is None:
             self._get_app_info()
-        return self.device_version_name
+        return self.device_version_name or "Unknown"
+
+    def validate(self):
+        """
+        校验配置是否可用于执行测试（不连接设备）。
+        Returns:
+            (bool, list): 是否通过，错误信息列表
+        """
+        errors = []
+        if not getattr(self, 'DEVICE_ID', None) or not str(self.DEVICE_ID).strip():
+            errors.append("设备ID未配置")
+        if not getattr(self, 'PACKAGE_NAME', None) or not str(self.PACKAGE_NAME).strip():
+            errors.append("应用包名未配置")
+        try:
+            c = int(getattr(self, 'EVENT_COUNT', 0))
+            if c <= 0:
+                errors.append("事件数量必须大于0")
+        except (TypeError, ValueError):
+            errors.append("事件数量必须为正整数")
+        return (len(errors) == 0, errors)
 
