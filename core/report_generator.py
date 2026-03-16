@@ -251,30 +251,28 @@ class ReportGenerator:
         <body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:1200px;margin:0 auto;padding:20px;background-color:#f4f4f4;">
             <h1 style="color:#2c3e50;text-align:center;border-bottom:2px solid #3498db;padding-bottom:10px;">Monkey 测试报告</h1>
 
-            <!-- 顶部统计卡片：用 table 布局替代 flex，兼容 Jenkins CSP -->
-            <table style="width:100%;border-collapse:separate;border-spacing:10px;margin:20px 0;">
+            <!-- 顶部统计卡片 -->
+            <table width="100%" cellpadding="0" cellspacing="8" style="margin:20px 0;">
                 <tr>
-                    <td style="text-align:center;background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);width:25%;">
-                        <div style="font-size:28px;font-weight:bold;color:#3498db;">{{ data.execution_count }}</div>
-                        <div style="font-size:13px;color:#666;margin-top:4px;">执行事件数</div>
+                    <td width="25%" style="text-align:center;background-color:#ffffff;padding:20px 10px;border:2px solid #3498db;">
+                        <div style="font-size:30px;font-weight:bold;color:#3498db;">{{ data.execution_count }}</div>
+                        <div style="font-size:13px;color:#666;margin-top:6px;">执行事件数</div>
                     </td>
-                    <td style="text-align:center;background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);width:25%;">
-                        <div style="font-size:28px;font-weight:bold;color:#3498db;">{{ data.crash_count }}</div>
-                        <div style="font-size:13px;color:#666;margin-top:4px;">崩溃次数</div>
+                    <td width="25%" style="text-align:center;background-color:#ffffff;padding:20px 10px;border:2px solid #3498db;">
+                        <div style="font-size:30px;font-weight:bold;color:#3498db;">{{ data.crash_count }}</div>
+                        <div style="font-size:13px;color:#666;margin-top:6px;">崩溃次数</div>
                     </td>
-                    <td style="text-align:center;background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);width:25%;">
-                        <div style="font-size:28px;font-weight:bold;color:#3498db;">{{ data.duration }}</div>
-                        <div style="font-size:13px;color:#666;margin-top:4px;">测试时长</div>
+                    <td width="25%" style="text-align:center;background-color:#ffffff;padding:20px 10px;border:2px solid #3498db;">
+                        <div style="font-size:30px;font-weight:bold;color:#3498db;">{{ data.duration }}</div>
+                        <div style="font-size:13px;color:#666;margin-top:6px;">测试时长</div>
                     </td>
-                    <td style="text-align:center;background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);width:25%;">
-                        <div style="font-size:22px;font-weight:bold;">
-                            {% if data.crash_count == 0 %}
-                            <span style="display:inline-block;padding:6px 14px;border-radius:3px;font-weight:bold;background-color:#d4edda;color:#155724;">成功</span>
-                            {% else %}
-                            <span style="display:inline-block;padding:6px 14px;border-radius:3px;font-weight:bold;background-color:#f8d7da;color:#721c24;">失败</span>
-                            {% endif %}
-                        </div>
-                        <div style="font-size:13px;color:#666;margin-top:4px;">测试结果</div>
+                    <td width="25%" style="text-align:center;background-color:#ffffff;padding:20px 10px;border:2px solid #3498db;">
+                        {% if data.crash_count == 0 %}
+                        <div style="font-size:22px;font-weight:bold;color:#155724;background-color:#d4edda;padding:6px;">成功</div>
+                        {% else %}
+                        <div style="font-size:22px;font-weight:bold;color:#721c24;background-color:#f8d7da;padding:6px;">失败</div>
+                        {% endif %}
+                        <div style="font-size:13px;color:#666;margin-top:6px;">测试结果</div>
                     </td>
                 </tr>
             </table>
