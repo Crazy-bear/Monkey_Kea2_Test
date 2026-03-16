@@ -340,15 +340,133 @@ class ReportGenerator:
             <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
                 <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">性能数据</h2>
                 <h3 style="color:#34495e;">性能趋势</h3>
-                <div style="margin-bottom:15px;">
-                    {% if data.performance_chart_svg %}
-                    <div style="width:100%;overflow:auto;">{{ data.performance_chart_svg | safe }}</div>
-                    {% elif data.performance_chart_png_base64 %}
-                    <img alt="performance chart" style="width:100%;max-height:420px;border:1px solid #eee;border-radius:4px;background:#fff;" src="data:image/png;base64,{{ data.performance_chart_png_base64 }}" />
-                    {% else %}
-                    <p style="color:#666;">性能趋势图未生成。</p>
-                    {% endif %}
+
+                <div style="position:relative;height:380px;margin-bottom:8px;">
+                    <canvas id="perfChart"></canvas>
                 </div>
+                <p style="font-size:12px;color:#999;margin:0 0 20px 0;">💡 鼠标悬停查看数值 &nbsp;·&nbsp; 滚轮缩放 &nbsp;·&nbsp; 拖拽平移</p>
+
+                <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+                <script>
+                (function() {
+                    var raw = {{ data.performance_data | tojson }};
+                    var labels = raw.map(function(d){ return d.timestamp || ''; });
+                    var cpu = raw.map(function(d){ return d.cpu; });
+                    var mem = raw.map(function(d){ return d.mem; });
+                    var fps = raw.map(function(d){ return d.fps; });
+
+                    // 超过200点时抽样，保持图表流畅
+                    if (raw.length > 200) {
+                        var step = Math.ceil(raw.length / 200);
+                        labels = labels.filter(function(_,i){ return i % step === 0; });
+                        cpu    = cpu.filter(function(_,i){ return i % step === 0; });
+                        mem    = mem.filter(function(_,i){ return i % step === 0; });
+                        fps    = fps.filter(function(_,i){ return i % step === 0; });
+                    }
+
+                    new Chart(document.getElementById('perfChart').getContext('2d'), {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'CPU (%)',
+                                    data: cpu,
+                                    borderColor: '#e74c3c',
+                                    backgroundColor: 'rgba(231,76,60,0.07)',
+                                    borderWidth: 2,
+                                    pointRadius: 2,
+                                    pointHoverRadius: 6,
+                                    tension: 0.3,
+                                    fill: true,
+                                    yAxisID: 'yCpu'
+                                },
+                                {
+                                    label: 'Mem (MB)',
+                                    data: mem,
+                                    borderColor: '#3498db',
+                                    backgroundColor: 'rgba(52,152,219,0.07)',
+                                    borderWidth: 2,
+                                    pointRadius: 2,
+                                    pointHoverRadius: 6,
+                                    tension: 0.3,
+                                    fill: true,
+                                    yAxisID: 'yMem'
+                                },
+                                {
+                                    label: 'FPS',
+                                    data: fps,
+                                    borderColor: '#2ecc71',
+                                    backgroundColor: 'rgba(46,204,113,0.07)',
+                                    borderWidth: 2,
+                                    pointRadius: 2,
+                                    pointHoverRadius: 6,
+                                    tension: 0.3,
+                                    fill: true,
+                                    yAxisID: 'yFps'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                    labels: { usePointStyle: true, padding: 20, font: { size: 13 } }
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(30,30,30,0.85)',
+                                    titleFont: { size: 12 },
+                                    bodyFont: { size: 13 },
+                                    padding: 12,
+                                    callbacks: {
+                                        label: function(ctx) {
+                                            var v = ctx.parsed.y;
+                                            if (ctx.dataset.label === 'CPU (%)') return '  CPU: ' + v.toFixed(2) + ' %';
+                                            if (ctx.dataset.label === 'Mem (MB)') return '  Mem: ' + v.toFixed(2) + ' MB';
+                                            if (ctx.dataset.label === 'FPS') return '  FPS: ' + v.toFixed(2);
+                                            return ctx.dataset.label + ': ' + v;
+                                        }
+                                    }
+                                },
+                                zoom: {
+                                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+                                    pan: { enabled: true, mode: 'x' }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    ticks: { maxTicksLimit: 8, maxRotation: 30, font: { size: 11 } },
+                                    grid: { color: 'rgba(0,0,0,0.04)' }
+                                },
+                                yCpu: {
+                                    type: 'linear', position: 'left',
+                                    title: { display: true, text: 'CPU (%)', color: '#e74c3c', font: { size: 12 } },
+                                    ticks: { color: '#e74c3c' },
+                                    grid: { color: 'rgba(0,0,0,0.04)' }
+                                },
+                                yMem: {
+                                    type: 'linear', position: 'left',
+                                    title: { display: true, text: 'Mem (MB)', color: '#3498db', font: { size: 12 } },
+                                    ticks: { color: '#3498db' },
+                                    grid: { drawOnChartArea: false }
+                                },
+                                yFps: {
+                                    type: 'linear', position: 'right',
+                                    title: { display: true, text: 'FPS', color: '#2ecc71', font: { size: 12 } },
+                                    ticks: { color: '#2ecc71' },
+                                    grid: { drawOnChartArea: false }
+                                }
+                            }
+                        }
+                    });
+                })();
+                </script>
+
                 <h3 style="color:#34495e;">性能统计</h3>
                 <table style="width:100%;border-collapse:collapse;">
                     <tr>
