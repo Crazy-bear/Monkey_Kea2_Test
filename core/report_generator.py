@@ -247,319 +247,157 @@ class ReportGenerator:
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Monkey Test Report</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    line-height: 1.6;
-                    color: #333;
-                    max-width: 1200px;
-                    margin: 0 auto;
-                    padding: 20px;
-                    background-color: #f4f4f4;
-                }
-                h1 {
-                    color: #2c3e50;
-                    text-align: center;
-                    border-bottom: 2px solid #3498db;
-                    padding-bottom: 10px;
-                }
-                h2 {
-                    color: #34495e;
-                    margin-top: 30px;
-                    border-left: 4px solid #3498db;
-                    padding-left: 10px;
-                }
-                .info-box {
-                    background-color: white;
-                    padding: 20px;
-                    border-radius: 5px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    margin-bottom: 20px;
-                }
-                .info-row {
-                    display: flex;
-                    margin-bottom: 15px;
-                    align-items: flex-start;
-                }
-                .info-label {
-                    font-weight: bold;
-                    width: 150px;
-                    padding-top: 5px;
-                }
-                .info-value {
-                    flex: 1;
-                    line-height: 1.6;
-                    padding: 5px 0;
-                }
-                .details {
-                    background-color: white;
-                    padding: 15px;
-                    border-radius: 5px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    white-space: pre-wrap;
-                    font-family: monospace;
-                    font-size: 14px;
-                    line-height: 1.4;
-                }
-                .crash-categories-container {
-                    background-color: white;
-                    padding: 10px;
-                    border-radius: 5px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    margin-bottom: 20px;
-                }
-                .status {
-                    display: inline-block;
-                    padding: 5px 10px;
-                    border-radius: 3px;
-                    font-weight: bold;
-                }
-                .status-success {
-                    background-color: #d4edda;
-                    color: #155724;
-                }
-                .status-failed {
-                    background-color: #f8d7da;
-                    color: #721c24;
-                }
-                .summary {
-                    display: flex;
-                    justify-content: space-around;
-                    margin: 20px 0;
-                }
-                .summary-item {
-                    text-align: center;
-                    background-color: white;
-                    padding: 20px;
-                    border-radius: 5px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    flex: 1;
-                    margin: 0 10px;
-                }
-                .summary-value {
-                    font-size: 24px;
-                    font-weight: bold;
-                    color: #3498db;
-                }
-                .summary-label {
-                    font-size: 14px;
-                    color: #666;
-                }
-                .crash-category {
-                    margin-bottom: 3px;
-                }
-                .category-header {
-                    cursor: pointer;
-                    padding: 6px 8px;
-                    background-color: #f0f0f0;
-                    border-radius: 3px;
-                    margin-bottom: 0;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                }
-                .category-header:hover {
-                    background-color: #e0e0e0;
-                }
-                .toggle-icon {
-                    transition: transform 0.3s;
-                    font-size: 12px;
-                }
-                .toggle-icon.collapsed {
-                    transform: rotate(-90deg);
-                }
-                .crash-details {
-                    margin-left: 15px;
-                    margin-top: 0;
-                    padding: 8px;
-                    background-color: #f9f9f9;
-                    border-radius: 0 0 3px 3px;
-                    border-top: 1px solid #e0e0e0;
-                }
-                .crash-item {
-                    padding: 2px 0;
-                    border-bottom: 1px solid #f0f0f0;
-                    font-size: 14px;
-                }
-                .crash-item:last-child {
-                    border-bottom: none;
-                }
-            </style>
-            <script>
-                function toggleCrashDetails(categoryId) {
-                    const details = document.getElementById(categoryId);
-                    const header = details.previousElementSibling;
-                    const icon = header.querySelector('.toggle-icon');
-                    
-                    if (details.style.display === 'none') {
-                        details.style.display = 'block';
-                        icon.classList.remove('collapsed');
-                    } else {
-                        details.style.display = 'none';
-                        icon.classList.add('collapsed');
-                    }
-                }
-            </script>
         </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px; background-color: #f4f4f4;">
-            <h1>Monkey 测试报告</h1>
-            
-            <div class="summary" style="display:flex; justify-content: space-around; margin: 20px 0; flex-wrap: wrap; gap: 10px;">
-                <div class="summary-item" style="text-align:center; background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); flex:1; min-width: 180px;">
-                    <div class="summary-value">{{ data.execution_count }}</div>
-                    <div class="summary-label">执行事件数</div>
+        <body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:1200px;margin:0 auto;padding:20px;background-color:#f4f4f4;">
+            <h1 style="color:#2c3e50;text-align:center;border-bottom:2px solid #3498db;padding-bottom:10px;">Monkey 测试报告</h1>
+
+            <div style="display:flex;justify-content:space-around;margin:20px 0;flex-wrap:wrap;gap:10px;">
+                <div style="text-align:center;background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);flex:1;min-width:180px;">
+                    <div style="font-size:24px;font-weight:bold;color:#3498db;">{{ data.execution_count }}</div>
+                    <div style="font-size:14px;color:#666;">执行事件数</div>
                 </div>
-                <div class="summary-item" style="text-align:center; background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); flex:1; min-width: 180px;">
-                    <div class="summary-value">{{ data.crash_count }}</div>
-                    <div class="summary-label">崩溃次数</div>
+                <div style="text-align:center;background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);flex:1;min-width:180px;">
+                    <div style="font-size:24px;font-weight:bold;color:#3498db;">{{ data.crash_count }}</div>
+                    <div style="font-size:14px;color:#666;">崩溃次数</div>
                 </div>
-                <div class="summary-item" style="text-align:center; background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); flex:1; min-width: 180px;">
-                    <div class="summary-value">{{ data.duration }}</div>
-                    <div class="summary-label">测试时长</div>
+                <div style="text-align:center;background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);flex:1;min-width:180px;">
+                    <div style="font-size:24px;font-weight:bold;color:#3498db;">{{ data.duration }}</div>
+                    <div style="font-size:14px;color:#666;">测试时长</div>
                 </div>
-                <div class="summary-item" style="text-align:center; background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); flex:1; min-width: 180px;">
-                    <div class="summary-value">
+                <div style="text-align:center;background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);flex:1;min-width:180px;">
+                    <div style="font-size:24px;font-weight:bold;">
                         {% if data.crash_count == 0 %}
-                        <span class="status status-success">成功</span>
+                        <span style="display:inline-block;padding:5px 10px;border-radius:3px;font-weight:bold;background-color:#d4edda;color:#155724;">成功</span>
                         {% else %}
-                        <span class="status status-failed">失败</span>
+                        <span style="display:inline-block;padding:5px 10px;border-radius:3px;font-weight:bold;background-color:#f8d7da;color:#721c24;">失败</span>
                         {% endif %}
                     </div>
-                    <div class="summary-label">测试结果</div>
+                    <div style="font-size:14px;color:#666;">测试结果</div>
                 </div>
             </div>
-            
-            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
-                <h2>设备信息</h2>
-                <div class="info-row">
-                    <div class="info-label">设备 ID:</div>
-                    <div class="info-value">{{ data.device_id }}</div>
+
+            <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
+                <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">设备信息</h2>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">设备 ID:</div>
+                    <div style="flex:1;">{{ data.device_id }}</div>
                 </div>
-                <div class="info-row">
-                    <div class="info-label">应用包名:</div>
-                    <div class="info-value">{{ data.package_name }}</div>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">应用包名:</div>
+                    <div style="flex:1;">{{ data.package_name }}</div>
                 </div>
-                <div class="info-row">
-                    <div class="info-label">应用版本:</div>
-                    <div class="info-value">{{ data.device_version_name }}</div>
-                </div>
-            </div>
-            
-            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
-                <h2>测试信息</h2>
-                <div class="info-row">
-                    <div class="info-label">开始时间:</div>
-                    <div class="info-value">{{ data.start_time }}</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">结束时间:</div>
-                    <div class="info-value">{{ data.end_time }}</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">随机种子:</div>
-                    <div class="info-value">{{ data.seed_value }}</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">事件数量:</div>
-                    <div class="info-value">{{ data.execution_count }}</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">崩溃次数:</div>
-                    <div class="info-value">{{ data.crash_count }}</div>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">应用版本:</div>
+                    <div style="flex:1;">{{ data.device_version_name }}</div>
                 </div>
             </div>
-            
+
+            <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
+                <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">测试信息</h2>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">开始时间:</div>
+                    <div style="flex:1;">{{ data.start_time }}</div>
+                </div>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">结束时间:</div>
+                    <div style="flex:1;">{{ data.end_time }}</div>
+                </div>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">随机种子:</div>
+                    <div style="flex:1;">{{ data.seed_value }}</div>
+                </div>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">事件数量:</div>
+                    <div style="flex:1;">{{ data.execution_count }}</div>
+                </div>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">崩溃次数:</div>
+                    <div style="flex:1;">{{ data.crash_count }}</div>
+                </div>
+            </div>
+
             {% if data.log_analysis %}
-            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
-                <h2>日志分析</h2>
+            <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
+                <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">日志分析</h2>
                 {% if data.log_analysis.crash_categories %}
-                <h3>崩溃分类</h3>
-                <div class="crash-categories-container">
+                <h3 style="color:#34495e;">崩溃分类</h3>
+                <div style="margin-bottom:20px;">
                     {% for category, count in data.log_analysis.crash_categories.items() %}
-                    <div class="crash-category">
-                        <div class="category-header" onclick="toggleCrashDetails('{{ category | replace(' ', '_') }}')">
-                            <strong>{{ category }}: {{ count }}次</strong> <span class="toggle-icon">▼</span>
-                        </div>
-                        <div id="{{ category | replace(' ', '_') }}" class="crash-details" style="display: none;">
+                    <details style="margin-bottom:4px;">
+                        <summary style="cursor:pointer;padding:6px 8px;background-color:#f0f0f0;border-radius:3px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+                            <strong>{{ category }}: {{ count }}次</strong> <span style="font-size:12px;">▼</span>
+                        </summary>
+                        <div style="margin-left:15px;padding:8px;background-color:#f9f9f9;border-radius:0 0 3px 3px;border-top:1px solid #e0e0e0;">
                             {% for crash in data.log_analysis.crash_details %}
                             {% if crash.category == category %}
-                            <div class="crash-item">{{ crash.message | default('无') }}</div>
+                            <div style="padding:2px 0;border-bottom:1px solid #f0f0f0;font-size:14px;">{{ crash.message | default('无') }}</div>
                             {% endif %}
                             {% endfor %}
                         </div>
-                    </div>
+                    </details>
                     {% endfor %}
                 </div>
                 {% endif %}
-                
-                <div class="info-row">
-                    <div class="info-label">分析结论:</div>
-                    <div class="info-value">{{ data.log_analysis.analysis_conclusion | default('无') | replace('\n', '<br>') | safe }}</div>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">分析结论:</div>
+                    <div style="flex:1;">{{ data.log_analysis.analysis_conclusion | default('无') | replace('\n', '<br>') | safe }}</div>
                 </div>
             </div>
             {% else %}
-            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
-                <h2>日志分析</h2>
-                <div class="info-row">
-                    <div class="info-label">分析结论:</div>
-                    <div class="info-value">日志分析未执行</div>
+            <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
+                <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">日志分析</h2>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">分析结论:</div>
+                    <div style="flex:1;">日志分析未执行</div>
                 </div>
             </div>
             {% endif %}
-            
+
             {% if data.performance_data %}
-            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
-                <h2>性能数据</h2>
-                <h3>性能趋势</h3>
-                <div class="info-row">
-                    <div class="info-value">
-                        {% if data.performance_chart_svg %}
-                        <div style="width:100%; overflow:auto;">{{ data.performance_chart_svg | safe }}</div>
-                        {% elif data.performance_chart_png_base64 %}
-                        <img alt="performance chart" style="width:100%; max-height:420px; object-fit:contain; border:1px solid #eee; border-radius:4px; background:#fff;" src="data:image/png;base64,{{ data.performance_chart_png_base64 }}" />
-                        {% else %}
-                        <div style="color:#666;">性能趋势图未生成（可能未采集性能数据，或缺少绘图库）。</div>
-                        {% endif %}
-                    </div>
+            <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
+                <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">性能数据</h2>
+                <h3 style="color:#34495e;">性能趋势</h3>
+                <div style="margin-bottom:15px;">
+                    {% if data.performance_chart_svg %}
+                    <div style="width:100%;overflow:auto;">{{ data.performance_chart_svg | safe }}</div>
+                    {% elif data.performance_chart_png_base64 %}
+                    <img alt="performance chart" style="width:100%;max-height:420px;object-fit:contain;border:1px solid #eee;border-radius:4px;background:#fff;" src="data:image/png;base64,{{ data.performance_chart_png_base64 }}" />
+                    {% else %}
+                    <div style="color:#666;">性能趋势图未生成（可能未采集性能数据，或缺少绘图库）。</div>
+                    {% endif %}
                 </div>
-                <h3>性能统计</h3>
-                <div class="info-row">
-                    <div class="info-label">平均CPU使用率:</div>
-                    <div class="info-value">
+                <h3 style="color:#34495e;">性能统计</h3>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">平均CPU使用率:</div>
+                    <div style="flex:1;">
                         {% if data.performance_data and (data.performance_data | length) > 0 %}
                         {{ "%.2f" | format((data.performance_data | map(attribute='cpu') | sum) / (data.performance_data | length)) }}%
-                        {% else %}
-                        无数据
-                        {% endif %}
+                        {% else %}无数据{% endif %}
                     </div>
                 </div>
-                <div class="info-row">
-                    <div class="info-label">平均内存使用量:</div>
-                    <div class="info-value">
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">平均内存使用量:</div>
+                    <div style="flex:1;">
                         {% if data.performance_data and (data.performance_data | length) > 0 %}
                         {{ "%.2f" | format((data.performance_data | map(attribute='mem') | sum) / (data.performance_data | length)) }} MB
-                        {% else %}
-                        无数据
-                        {% endif %}
+                        {% else %}无数据{% endif %}
                     </div>
                 </div>
-                <div class="info-row">
-                    <div class="info-label">平均FPS:</div>
-                    <div class="info-value">
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">平均FPS:</div>
+                    <div style="flex:1;">
                         {% if data.performance_data and (data.performance_data | length) > 0 %}
                         {{ "%.2f" | format((data.performance_data | map(attribute='fps') | sum) / (data.performance_data | length)) }}
-                        {% else %}
-                        无数据
-                        {% endif %}
+                        {% else %}无数据{% endif %}
                     </div>
                 </div>
             </div>
             {% else %}
-            <div class="info-box" style="background-color:#fff; padding:20px; border-radius:5px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
-                <h2>性能数据</h2>
-                <div class="info-row">
-                    <div class="info-label">状态:</div>
-                    <div class="info-value">性能数据未采集</div>
+            <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
+                <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">性能数据</h2>
+                <div style="display:flex;margin-bottom:10px;">
+                    <div style="font-weight:bold;width:150px;">状态:</div>
+                    <div style="flex:1;">性能数据未采集</div>
                 </div>
             </div>
             {% endif %}
