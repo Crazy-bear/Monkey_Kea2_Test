@@ -18,6 +18,7 @@ import csv
 import json
 from datetime import datetime
 from config.logging_config import logger
+from config.config import Config
 from performance.cpu import CPUMonitor
 from performance.memory import MemoryMonitor
 from performance.fps import FPSMonitor
@@ -41,6 +42,14 @@ class PerformanceMonitor:
         self.is_running = False
         self.thread = None
         self.data = []
+        self.leak_analysis = {'suspected': False, 'total_growth_mb': 0, 'leak_segments': 0, 'details': []}
+
+        # 性能阈值
+        self.cpu_threshold = Config.PERF_CPU_THRESHOLD
+        self.mem_threshold = Config.PERF_MEM_THRESHOLD
+        self.fps_threshold = Config.PERF_FPS_THRESHOLD
+        self.mem_leak_window = Config.PERF_MEM_LEAK_WINDOW
+        self.mem_leak_growth = Config.PERF_MEM_LEAK_GROWTH
         
         # 初始化各个监控器
         self.cpu_monitor = CPUMonitor(device_id, package_name)
@@ -76,6 +85,14 @@ class PerformanceMonitor:
         if self.thread:
             self.thread.join(timeout=5)
         
+        # 内存泄漏分析
+        self.leak_analysis = self._analyze_memory_leak()
+        if self.leak_analysis['suspected']:
+            logger.warning(
+                f"⚠️  疑似内存泄漏：监控期间内存增长 {self.leak_analysis['total_growth_mb']:.1f} MB，"
+                f"检测到 {self.leak_analysis['leak_segments']} 段持续增长"
+            )
+
         # 保存数据
         self._save_data()
         logger.info(f"性能监控已停止 - 共采集 {len(self.data)} 条数据")
@@ -98,7 +115,10 @@ class PerformanceMonitor:
                     'timestamp': timestamp,
                     'cpu': cpu,
                     'mem': mem,
-                    'fps': fps
+                    'fps': fps,
+                    'cpu_exceed': cpu > self.cpu_threshold,
+                    'mem_exceed': mem > self.mem_threshold,
+                    'fps_low': fps > 0 and fps < self.fps_threshold,
                 })
                 
                 time.sleep(self.interval)
@@ -106,6 +126,43 @@ class PerformanceMonitor:
                 logger.error(f"监控过程中发生错误: {e}")
                 time.sleep(self.interval)
     
+    def _analyze_memory_leak(self):
+        """
+        基于滑动窗口检测内存泄漏：
+        - 在 mem_leak_window 大小的窗口内，若内存净增长超过 mem_leak_growth MB，则记为一段泄漏
+        - 统计泄漏段数量和总增长量
+        """
+        result = {'suspected': False, 'total_growth_mb': 0.0, 'leak_segments': 0, 'details': []}
+        if len(self.data) < self.mem_leak_window:
+            return result
+
+        mem_vals = [d['mem'] for d in self.data]
+        w = self.mem_leak_window
+        segments = 0
+        i = 0
+        while i + w <= len(mem_vals):
+            window = mem_vals[i:i + w]
+            growth = window[-1] - window[0]
+            if growth >= self.mem_leak_growth:
+                segments += 1
+                result['details'].append({
+                    'start_idx': i,
+                    'end_idx': i + w - 1,
+                    'start_time': self.data[i]['timestamp'],
+                    'end_time': self.data[i + w - 1]['timestamp'],
+                    'growth_mb': round(growth, 2),
+                })
+                i += w  # 跳过已计入的窗口，避免重叠计数
+            else:
+                i += 1
+
+        if segments > 0:
+            total_growth = mem_vals[-1] - mem_vals[0]
+            result['suspected'] = True
+            result['leak_segments'] = segments
+            result['total_growth_mb'] = round(total_growth, 2)
+        return result
+
     def _save_data(self):
         """
         保存数据到CSV和JSON文件
@@ -146,3 +203,15 @@ class PerformanceMonitor:
             list: 监控数据列表
         """
         return self.data
+
+    def get_thresholds(self):
+        """返回当前阈值配置"""
+        return {
+            'cpu': self.cpu_threshold,
+            'mem': self.mem_threshold,
+            'fps': self.fps_threshold,
+        }
+
+    def get_leak_analysis(self):
+        """返回内存泄漏分析结果"""
+        return self.leak_analysis

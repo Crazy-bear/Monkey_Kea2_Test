@@ -41,10 +41,14 @@ class ReportGenerator:
             if data.get("performance_data") is not None:
                 data["performance_data"] = self._normalize_performance_data(data["performance_data"])
             if data.get("performance_data"):
+                thresholds = data.get("performance_thresholds") or {}
+                leak = data.get("memory_leak_analysis") or {}
                 # Jenkins 常见 CSP 可能禁止 img 的 data: URI，因此优先生成内联 SVG
-                data["performance_chart_svg"] = self._build_performance_chart_svg(data["performance_data"])
+                data["performance_chart_svg"] = self._build_performance_chart_svg(
+                    data["performance_data"], thresholds=thresholds, leak_analysis=leak
+                )
                 data["performance_chart_png_base64"] = self._build_performance_chart_png_base64(
-                    data["performance_data"]
+                    data["performance_data"], thresholds=thresholds, leak_analysis=leak
                 )
             else:
                 data["performance_chart_svg"] = None
@@ -68,7 +72,7 @@ class ReportGenerator:
 
     def _normalize_performance_data(self, performance_data):
         """
-        将性能数据规范为 list of dict，每项含 timestamp, cpu, mem, fps。
+        将性能数据规范为 list of dict，每项含 timestamp, cpu, mem, fps 及超标标记。
         空或非法则返回 None，便于模板统一判断。
         """
         if performance_data is None:
@@ -84,13 +88,16 @@ class ReportGenerator:
                 "cpu": float(item.get("cpu", 0) or 0),
                 "mem": float(item.get("mem", 0) or 0),
                 "fps": float(item.get("fps", 0) or 0),
+                "cpu_exceed": bool(item.get("cpu_exceed", False)),
+                "mem_exceed": bool(item.get("mem_exceed", False)),
+                "fps_low": bool(item.get("fps_low", False)),
             })
         return result if result else None
 
-    def _build_performance_chart_png_base64(self, performance_data):
+    def _build_performance_chart_png_base64(self, performance_data, thresholds=None, leak_analysis=None):
         """
         使用 matplotlib 生成性能趋势图并以内嵌 base64 PNG 形式返回。
-        这样在 Jenkins（CSP/sandbox 禁止脚本/外链）中也能显示图表。
+        支持阈值线标注和内存泄漏区间高亮。
         """
         try:
             import matplotlib
@@ -103,21 +110,56 @@ class ReportGenerator:
         if not performance_data:
             return None
 
+        thresholds = thresholds or {}
+
         try:
             labels = [str(i.get("timestamp", "")) for i in performance_data]
             cpu = [float(i.get("cpu", 0) or 0) for i in performance_data]
             mem = [float(i.get("mem", 0) or 0) for i in performance_data]
             fps = [float(i.get("fps", 0) or 0) for i in performance_data]
+            xs = list(range(len(cpu)))
 
             fig, ax1 = plt.subplots(figsize=(10, 4), dpi=120)
-            ax1.plot(cpu, color="#ff6384", linewidth=1.5, label="CPU(%)")
-            ax1.plot(mem, color="#36a2eb", linewidth=1.5, label="Mem(MB)")
+            ax1.plot(xs, cpu, color="#ff6384", linewidth=1.5, label="CPU(%)")
+            ax1.plot(xs, mem, color="#36a2eb", linewidth=1.5, label="Mem(MB)")
             ax1.set_ylabel("CPU / Mem")
             ax1.grid(True, alpha=0.25)
 
+            # CPU 阈值线
+            if thresholds.get('cpu'):
+                ax1.axhline(y=thresholds['cpu'], color="#ff6384", linestyle='--', linewidth=1,
+                            alpha=0.7, label=f"CPU阈值({thresholds['cpu']}%)")
+            # Mem 阈值线
+            if thresholds.get('mem'):
+                ax1.axhline(y=thresholds['mem'], color="#36a2eb", linestyle='--', linewidth=1,
+                            alpha=0.7, label=f"Mem阈值({thresholds['mem']}MB)")
+
+            # 标注 CPU/Mem 超标点
+            cpu_ex = [i for i, d in enumerate(performance_data) if d.get('cpu_exceed')]
+            mem_ex = [i for i, d in enumerate(performance_data) if d.get('mem_exceed')]
+            if cpu_ex:
+                ax1.scatter(cpu_ex, [cpu[i] for i in cpu_ex], color="#ff0000", s=30, zorder=5, label="CPU超标")
+            if mem_ex:
+                ax1.scatter(mem_ex, [mem[i] for i in mem_ex], color="#0055ff", s=30, zorder=5, label="Mem超标")
+
             ax2 = ax1.twinx()
-            ax2.plot(fps, color="#4bc0c0", linewidth=1.5, label="FPS")
+            ax2.plot(xs, fps, color="#4bc0c0", linewidth=1.5, label="FPS")
             ax2.set_ylabel("FPS")
+
+            # FPS 阈值线
+            if thresholds.get('fps'):
+                ax2.axhline(y=thresholds['fps'], color="#4bc0c0", linestyle='--', linewidth=1,
+                            alpha=0.7, label=f"FPS阈值({thresholds['fps']})")
+            # 标注 FPS 低帧点
+            fps_low = [i for i, d in enumerate(performance_data) if d.get('fps_low')]
+            if fps_low:
+                ax2.scatter(fps_low, [fps[i] for i in fps_low], color="#ff8800", s=30, zorder=5, label="FPS过低")
+
+            # 内存泄漏区间高亮
+            if leak_analysis and leak_analysis.get('suspected'):
+                for seg in leak_analysis.get('details', []):
+                    ax1.axvspan(seg['start_idx'], seg['end_idx'],
+                                alpha=0.12, color='orange', label='疑似泄漏区间')
 
             # x 轴标签过密时抽样显示
             if labels:
@@ -127,7 +169,10 @@ class ReportGenerator:
 
             lines1, labels1 = ax1.get_legend_handles_labels()
             lines2, labels2 = ax2.get_legend_handles_labels()
-            ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left", fontsize=8)
+            # 去重图例
+            seen = set()
+            combined = [(l, lb) for l, lb in zip(lines1 + lines2, labels1 + labels2) if lb not in seen and not seen.add(lb)]
+            ax1.legend([c[0] for c in combined], [c[1] for c in combined], loc="upper left", fontsize=7)
 
             fig.tight_layout()
             buf = io.BytesIO()
@@ -139,13 +184,16 @@ class ReportGenerator:
             logger.error(f"生成性能图失败: {e}")
             return None
 
-    def _build_performance_chart_svg(self, performance_data, width=980, height=360, padding=40):
+    def _build_performance_chart_svg(self, performance_data, width=980, height=380, padding=40,
+                                     thresholds=None, leak_analysis=None):
         """
-        生成内联 SVG 折线图（CPU/Mem/FPS），避免 Jenkins CSP 阻断脚本或 data: 图片。
+        生成内联 SVG 折线图（CPU/Mem/FPS），支持阈值线、超标标注和内存泄漏区间高亮。
         返回 SVG 字符串（包含 <svg> ... </svg>），用于模板中 safe 渲染。
         """
         if not performance_data:
             return None
+        thresholds = thresholds or {}
+        leak_analysis = leak_analysis or {}
         try:
             labels = [str(i.get("timestamp", "")) for i in performance_data]
             cpu = [float(i.get("cpu", 0) or 0) for i in performance_data]
@@ -156,18 +204,14 @@ class ReportGenerator:
             if n < 2:
                 return None
 
-            # X 坐标映射
-            x0 = padding
-            x1 = width - padding
-            y0 = padding
-            y1 = height - padding
+            x0, x1 = padding, width - padding
+            y0, y1 = padding + 20, height - padding
+
             def x_at(idx):
                 return x0 + (x1 - x0) * (idx / (n - 1))
 
-            # Y 坐标（上小下大）
             def scale_series(values):
-                vmin = min(values)
-                vmax = max(values)
+                vmin, vmax = min(values), max(values)
                 if vmax == vmin:
                     vmax = vmin + 1.0
                 def y_at(v):
@@ -179,54 +223,94 @@ class ReportGenerator:
             y_fps, fps_min, fps_max = scale_series(fps)
 
             def polyline_points(values, y_map):
-                pts = []
-                for i, v in enumerate(values):
-                    pts.append(f"{x_at(i):.1f},{y_map(v):.1f}")
-                return " ".join(pts)
+                return " ".join(f"{x_at(i):.1f},{y_map(v):.1f}" for i, v in enumerate(values))
 
             cpu_pts = polyline_points(cpu, y_cpu)
             mem_pts = polyline_points(mem, y_mem)
             fps_pts = polyline_points(fps, y_fps)
 
-            # X 轴标签抽样
+            # X 轴标签
             step = max(1, n // 6)
-            x_labels = []
-            for i in range(0, n, step):
-                txt = labels[i]
-                x = x_at(i)
-                x_labels.append(
-                    f'<text x="{x:.1f}" y="{height-12}" font-size="10" fill="#666" text-anchor="middle">{_escape_xml(txt)}</text>'
-                )
+            x_labels = [
+                f'<text x="{x_at(i):.1f}" y="{height - 8}" font-size="10" fill="#666" text-anchor="middle">{_escape_xml(labels[i])}</text>'
+                for i in range(0, n, step)
+            ]
 
-            # 画布与网格
-            grid = []
-            for k in range(5):
-                y = y0 + (y1 - y0) * (k / 4)
-                grid.append(f'<line x1="{x0}" y1="{y:.1f}" x2="{x1}" y2="{y:.1f}" stroke="#eee" />')
+            # 网格线
+            grid = [
+                f'<line x1="{x0}" y1="{y0 + (y1 - y0) * k / 4:.1f}" x2="{x1}" y2="{y0 + (y1 - y0) * k / 4:.1f}" stroke="#eee" />'
+                for k in range(5)
+            ]
 
-            svg = f"""
-<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="性能趋势图">
+            # 阈值线（CPU/Mem 共用左轴坐标系，FPS 用右轴）
+            threshold_lines = []
+            if thresholds.get('cpu') is not None:
+                ty = y_cpu(thresholds['cpu'])
+                if y0 <= ty <= y1:
+                    threshold_lines.append(
+                        f'<line x1="{x0}" y1="{ty:.1f}" x2="{x1}" y2="{ty:.1f}" stroke="#ff6384" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.8"/>'
+                        f'<text x="{x1 - 4}" y="{ty - 3:.1f}" font-size="10" fill="#ff6384" text-anchor="end">CPU阈值 {thresholds["cpu"]}%</text>'
+                    )
+            if thresholds.get('mem') is not None:
+                ty = y_mem(thresholds['mem'])
+                if y0 <= ty <= y1:
+                    threshold_lines.append(
+                        f'<line x1="{x0}" y1="{ty:.1f}" x2="{x1}" y2="{ty:.1f}" stroke="#36a2eb" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.8"/>'
+                        f'<text x="{x1 - 4}" y="{ty - 3:.1f}" font-size="10" fill="#36a2eb" text-anchor="end">Mem阈值 {thresholds["mem"]}MB</text>'
+                    )
+            if thresholds.get('fps') is not None:
+                ty = y_fps(thresholds['fps'])
+                if y0 <= ty <= y1:
+                    threshold_lines.append(
+                        f'<line x1="{x0}" y1="{ty:.1f}" x2="{x1}" y2="{ty:.1f}" stroke="#4bc0c0" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.8"/>'
+                        f'<text x="{x0 + 4}" y="{ty - 3:.1f}" font-size="10" fill="#4bc0c0" text-anchor="start">FPS阈值 {thresholds["fps"]}</text>'
+                    )
+
+            # 超标标注点
+            exceed_marks = []
+            for i, d in enumerate(performance_data):
+                if d.get('cpu_exceed'):
+                    cx, cy = x_at(i), y_cpu(cpu[i])
+                    exceed_marks.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="#ff0000" opacity="0.85"><title>CPU超标: {cpu[i]:.1f}%</title></circle>')
+                if d.get('mem_exceed'):
+                    cx, cy = x_at(i), y_mem(mem[i])
+                    exceed_marks.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="#0044cc" opacity="0.85"><title>Mem超标: {mem[i]:.1f}MB</title></circle>')
+                if d.get('fps_low'):
+                    cx, cy = x_at(i), y_fps(fps[i])
+                    exceed_marks.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="#ff8800" opacity="0.85"><title>FPS过低: {fps[i]:.1f}</title></circle>')
+
+            # 内存泄漏区间高亮
+            leak_rects = []
+            if leak_analysis.get('suspected'):
+                for seg in leak_analysis.get('details', []):
+                    rx = x_at(seg['start_idx'])
+                    rw = x_at(seg['end_idx']) - rx
+                    leak_rects.append(
+                        f'<rect x="{rx:.1f}" y="{y0}" width="{rw:.1f}" height="{y1 - y0}" fill="orange" opacity="0.12"/>'
+                        f'<text x="{rx + rw/2:.1f}" y="{y0 + 12}" font-size="10" fill="#cc6600" text-anchor="middle">⚠ 疑似泄漏 +{seg["growth_mb"]}MB</text>'
+                    )
+
+            svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="性能趋势图">
   <rect x="0" y="0" width="{width}" height="{height}" rx="4" ry="4" fill="#ffffff" stroke="#eeeeee"/>
   {"".join(grid)}
+  {"".join(leak_rects)}
   <line x1="{x0}" y1="{y1}" x2="{x1}" y2="{y1}" stroke="#ccc"/>
   <line x1="{x0}" y1="{y0}" x2="{x0}" y2="{y1}" stroke="#ccc"/>
-
+  {"".join(threshold_lines)}
   <polyline fill="none" stroke="#ff6384" stroke-width="2" points="{cpu_pts}" />
   <polyline fill="none" stroke="#36a2eb" stroke-width="2" points="{mem_pts}" />
   <polyline fill="none" stroke="#4bc0c0" stroke-width="2" points="{fps_pts}" />
-
+  {"".join(exceed_marks)}
   <g>
-    <rect x="{padding}" y="10" width="240" height="26" rx="4" ry="4" fill="#fff" stroke="#eee"/>
-    <circle cx="{padding+12}" cy="23" r="4" fill="#ff6384"/><text x="{padding+22}" y="27" font-size="11" fill="#333">CPU(%)</text>
-    <circle cx="{padding+82}" cy="23" r="4" fill="#36a2eb"/><text x="{padding+92}" y="27" font-size="11" fill="#333">Mem(MB)</text>
-    <circle cx="{padding+165}" cy="23" r="4" fill="#4bc0c0"/><text x="{padding+175}" y="27" font-size="11" fill="#333">FPS</text>
+    <rect x="{padding}" y="6" width="320" height="22" rx="3" ry="3" fill="#fff" stroke="#eee"/>
+    <circle cx="{padding+10}" cy="17" r="4" fill="#ff6384"/><text x="{padding+18}" y="21" font-size="11" fill="#333">CPU(%)</text>
+    <circle cx="{padding+80}" cy="17" r="4" fill="#36a2eb"/><text x="{padding+88}" y="21" font-size="11" fill="#333">Mem(MB)</text>
+    <circle cx="{padding+162}" cy="17" r="4" fill="#4bc0c0"/><text x="{padding+170}" y="21" font-size="11" fill="#333">FPS</text>
+    <circle cx="{padding+210}" cy="17" r="4" fill="#ff0000"/><text x="{padding+218}" y="21" font-size="11" fill="#333">超标</text>
+    <circle cx="{padding+258}" cy="17" r="4" fill="#ff8800"/><text x="{padding+266}" y="21" font-size="11" fill="#333">FPS低</text>
   </g>
-
-  <g>
-    {"".join(x_labels)}
-  </g>
-</svg>
-""".strip()
+  <g>{"".join(x_labels)}</g>
+</svg>""".strip()
             return svg
         except Exception as e:
             logger.error(f"生成 SVG 性能图失败: {e}")
@@ -283,6 +367,7 @@ class ReportGenerator:
                     <tr><td style="font-weight:bold;width:150px;padding:6px 0;">设备 ID:</td><td style="padding:6px 0;">{{ data.device_id }}</td></tr>
                     <tr><td style="font-weight:bold;padding:6px 0;">应用包名:</td><td style="padding:6px 0;">{{ data.package_name }}</td></tr>
                     <tr><td style="font-weight:bold;padding:6px 0;">应用版本:</td><td style="padding:6px 0;">{{ data.device_version_name }}</td></tr>
+                    <tr><td style="font-weight:bold;padding:6px 0;">主板固件:</td><td style="padding:6px 0;">{{ data.firmware_version | default('未知') }}</td></tr>
                 </table>
             </div>
 
@@ -362,7 +447,13 @@ class ReportGenerator:
                     var cpu    = raw.map(function(d){ return +d.cpu || 0; });
                     var mem    = raw.map(function(d){ return +d.mem || 0; });
                     var fps    = raw.map(function(d){ return +d.fps || 0; });
+                    var cpuExceed = raw.map(function(d){ return !!d.cpu_exceed; });
+                    var memExceed = raw.map(function(d){ return !!d.mem_exceed; });
+                    var fpsLow    = raw.map(function(d){ return !!d.fps_low; });
                     var n      = raw.length;
+
+                    var thresholds = {{ data.performance_thresholds | default({}) | tojson }};
+                    var leakAnalysis = {{ data.memory_leak_analysis | default({}) | tojson }};
 
                     var canvas  = document.getElementById('perfChart');
                     var tooltip = document.getElementById('perfTooltip');
@@ -479,6 +570,65 @@ class ReportGenerator:
                         drawLine(mem, memMM, '#3498db', 'rgba(52,152,219,0.07)');
                         drawLine(fps, fpsMM, '#2ecc71', 'rgba(46,204,113,0.07)');
 
+                        // 内存泄漏区间高亮
+                        if (leakAnalysis && leakAnalysis.suspected && leakAnalysis.details) {
+                            leakAnalysis.details.forEach(function(seg) {
+                                var rx = xAt(seg.start_idx), rw = xAt(seg.end_idx) - xAt(seg.start_idx);
+                                ctx.fillStyle = 'rgba(255,165,0,0.12)';
+                                ctx.fillRect(rx, PAD_T, rw, chartH);
+                                ctx.fillStyle = '#cc6600'; ctx.font = '10px Arial'; ctx.textAlign = 'center';
+                                ctx.fillText('⚠ +' + seg.growth_mb + 'MB', rx + rw / 2, PAD_T + 12);
+                            });
+                        }
+
+                        // 阈值线
+                        ctx.setLineDash([6, 3]);
+                        ctx.lineWidth = 1.5;
+                        if (thresholds.cpu != null) {
+                            var ty = yAt(thresholds.cpu, cpuMM[0], cpuMM[1]);
+                            if (ty >= PAD_T && ty <= PAD_T + chartH) {
+                                ctx.beginPath(); ctx.strokeStyle = 'rgba(231,76,60,0.75)';
+                                ctx.moveTo(PAD_L, ty); ctx.lineTo(PAD_L + chartW, ty); ctx.stroke();
+                                ctx.fillStyle = '#e74c3c'; ctx.font = '10px Arial'; ctx.textAlign = 'right';
+                                ctx.fillText('CPU阈值 ' + thresholds.cpu + '%', PAD_L + chartW - 4, ty - 3);
+                            }
+                        }
+                        if (thresholds.mem != null) {
+                            var my2 = yAt(thresholds.mem, memMM[0], memMM[1]);
+                            if (my2 >= PAD_T && my2 <= PAD_T + chartH) {
+                                ctx.beginPath(); ctx.strokeStyle = 'rgba(52,152,219,0.75)';
+                                ctx.moveTo(PAD_L, my2); ctx.lineTo(PAD_L + chartW, my2); ctx.stroke();
+                                ctx.fillStyle = '#3498db'; ctx.font = '10px Arial'; ctx.textAlign = 'right';
+                                ctx.fillText('Mem阈值 ' + thresholds.mem + 'MB', PAD_L + chartW - 4, my2 - 3);
+                            }
+                        }
+                        if (thresholds.fps != null) {
+                            var fy2 = yAt(thresholds.fps, fpsMM[0], fpsMM[1]);
+                            if (fy2 >= PAD_T && fy2 <= PAD_T + chartH) {
+                                ctx.beginPath(); ctx.strokeStyle = 'rgba(46,204,113,0.75)';
+                                ctx.moveTo(PAD_L, fy2); ctx.lineTo(PAD_L + chartW, fy2); ctx.stroke();
+                                ctx.fillStyle = '#2ecc71'; ctx.font = '10px Arial'; ctx.textAlign = 'left';
+                                ctx.fillText('FPS阈值 ' + thresholds.fps, PAD_L + 4, fy2 - 3);
+                            }
+                        }
+                        ctx.setLineDash([]);
+
+                        // 超标点标注
+                        for (var si = vs; si <= ve; si++) {
+                            if (cpuExceed[si]) {
+                                ctx.beginPath(); ctx.arc(xAt(si), yAt(cpu[si], cpuMM[0], cpuMM[1]), 5, 0, Math.PI*2);
+                                ctx.fillStyle = '#ff0000'; ctx.fill();
+                            }
+                            if (memExceed[si]) {
+                                ctx.beginPath(); ctx.arc(xAt(si), yAt(mem[si], memMM[0], memMM[1]), 5, 0, Math.PI*2);
+                                ctx.fillStyle = '#0044cc'; ctx.fill();
+                            }
+                            if (fpsLow[si]) {
+                                ctx.beginPath(); ctx.arc(xAt(si), yAt(fps[si], fpsMM[0], fpsMM[1]), 5, 0, Math.PI*2);
+                                ctx.fillStyle = '#ff8800'; ctx.fill();
+                            }
+                        }
+
                         // Y轴标题
                         ctx.save();
                         ctx.translate(14, PAD_T + chartH / 2);
@@ -502,7 +652,8 @@ class ReportGenerator:
                         ctx.restore();
 
                         // 图例
-                        var legends = [['CPU (%)', '#e74c3c'], ['Mem (MB)', '#3498db'], ['FPS', '#2ecc71']];
+                        var legends = [['CPU (%)', '#e74c3c'], ['Mem (MB)', '#3498db'], ['FPS', '#2ecc71'],
+                                       ['超标', '#ff0000'], ['FPS低', '#ff8800']];
                         var lx = PAD_L;
                         legends.forEach(function(lg) {
                             ctx.fillStyle = lg[1];
@@ -553,9 +704,9 @@ class ReportGenerator:
                         // tooltip 内容
                         tooltip.innerHTML =
                             '<div style="font-weight:bold;margin-bottom:6px;color:#ddd;">' + (labels[idx] || '') + '</div>' +
-                            '<div style="color:#e74c3c;">● CPU: ' + cpu[idx].toFixed(2) + ' %</div>' +
-                            '<div style="color:#5dade2;">● Mem: ' + mem[idx].toFixed(2) + ' MB</div>' +
-                            '<div style="color:#2ecc71;">● FPS: ' + fps[idx].toFixed(2) + '</div>';
+                            '<div style="color:#e74c3c;">● CPU: ' + cpu[idx].toFixed(2) + ' %' + (cpuExceed[idx] ? ' <span style="color:#ff4444">⚠超标</span>' : '') + '</div>' +
+                            '<div style="color:#5dade2;">● Mem: ' + mem[idx].toFixed(2) + ' MB' + (memExceed[idx] ? ' <span style="color:#4488ff">⚠超标</span>' : '') + '</div>' +
+                            '<div style="color:#2ecc71;">● FPS: ' + fps[idx].toFixed(2) + (fpsLow[idx] ? ' <span style="color:#ff8800">⚠过低</span>' : '') + '</div>';
 
                         var tx = lx + 14;
                         if (tx + 180 > W) tx = lx - 190;
@@ -617,6 +768,37 @@ class ReportGenerator:
                 </script>
 
                 <h3 style="color:#34495e;">性能统计</h3>
+
+                <!-- 阈值配置说明 -->
+                {% if data.performance_thresholds %}
+                <p style="font-size:12px;color:#888;margin:0 0 8px 0;">
+                    阈值设定：CPU ≤ {{ data.performance_thresholds.cpu }}%　Mem ≤ {{ data.performance_thresholds.mem }} MB　FPS ≥ {{ data.performance_thresholds.fps }}
+                    &nbsp;·&nbsp; 图表中 <span style="color:#ff0000;font-weight:bold;">●</span> CPU超标 &nbsp;
+                    <span style="color:#0044cc;font-weight:bold;">●</span> Mem超标 &nbsp;
+                    <span style="color:#ff8800;font-weight:bold;">●</span> FPS过低 &nbsp;
+                    <span style="background:rgba(255,165,0,0.3);padding:0 4px;">橙色区间</span> 疑似内存泄漏
+                </p>
+                {% endif %}
+
+                <!-- 内存泄漏警告 -->
+                {% if data.memory_leak_analysis and data.memory_leak_analysis.suspected %}
+                <div style="background-color:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:12px 16px;margin-bottom:12px;">
+                    <strong style="color:#856404;">⚠ 疑似内存泄漏</strong>
+                    <span style="color:#856404;margin-left:8px;">
+                        监控期间内存净增长 {{ "%.1f" | format(data.memory_leak_analysis.total_growth_mb) }} MB，
+                        检测到 {{ data.memory_leak_analysis.leak_segments }} 段持续增长区间（图表橙色区域）。
+                        建议检查是否存在未释放的资源或循环引用。
+                    </span>
+                    {% if data.memory_leak_analysis.details %}
+                    <ul style="margin:8px 0 0 0;padding-left:20px;font-size:13px;color:#856404;">
+                        {% for seg in data.memory_leak_analysis.details %}
+                        <li>{{ seg.start_time }} → {{ seg.end_time }}，增长 {{ seg.growth_mb }} MB</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+                {% endif %}
+
                 <table style="width:100%;border-collapse:collapse;">
                     <tr style="background-color:#f8f9fa;">
                         <td style="font-weight:bold;width:160px;padding:6px 8px;border:1px solid #dee2e6;color:#666;">指标</td>
