@@ -42,10 +42,13 @@ class ReportGenerator:
             if data.get("performance_data") is not None:
                 data["performance_data"] = self._normalize_performance_data(data["performance_data"])
             if data.get("performance_data"):
+                # Jenkins 常见 CSP 可能禁止 img 的 data: URI，因此优先生成内联 SVG
+                data["performance_chart_svg"] = self._build_performance_chart_svg(data["performance_data"])
                 data["performance_chart_png_base64"] = self._build_performance_chart_png_base64(
                     data["performance_data"]
                 )
             else:
+                data["performance_chart_svg"] = None
                 data["performance_chart_png_base64"] = None
 
             template_file = os.path.join(self.template_dir, "report_template.html")
@@ -135,6 +138,99 @@ class ReportGenerator:
             return base64.b64encode(buf.read()).decode("ascii")
         except Exception as e:
             logger.error(f"生成性能图失败: {e}")
+            return None
+
+    def _build_performance_chart_svg(self, performance_data, width=980, height=360, padding=40):
+        """
+        生成内联 SVG 折线图（CPU/Mem/FPS），避免 Jenkins CSP 阻断脚本或 data: 图片。
+        返回 SVG 字符串（包含 <svg> ... </svg>），用于模板中 safe 渲染。
+        """
+        if not performance_data:
+            return None
+        try:
+            labels = [str(i.get("timestamp", "")) for i in performance_data]
+            cpu = [float(i.get("cpu", 0) or 0) for i in performance_data]
+            mem = [float(i.get("mem", 0) or 0) for i in performance_data]
+            fps = [float(i.get("fps", 0) or 0) for i in performance_data]
+
+            n = len(performance_data)
+            if n < 2:
+                return None
+
+            # X 坐标映射
+            x0 = padding
+            x1 = width - padding
+            y0 = padding
+            y1 = height - padding
+            def x_at(idx):
+                return x0 + (x1 - x0) * (idx / (n - 1))
+
+            # Y 坐标（上小下大）
+            def scale_series(values):
+                vmin = min(values)
+                vmax = max(values)
+                if vmax == vmin:
+                    vmax = vmin + 1.0
+                def y_at(v):
+                    return y1 - (y1 - y0) * ((v - vmin) / (vmax - vmin))
+                return y_at, vmin, vmax
+
+            y_cpu, cpu_min, cpu_max = scale_series(cpu)
+            y_mem, mem_min, mem_max = scale_series(mem)
+            y_fps, fps_min, fps_max = scale_series(fps)
+
+            def polyline_points(values, y_map):
+                pts = []
+                for i, v in enumerate(values):
+                    pts.append(f"{x_at(i):.1f},{y_map(v):.1f}")
+                return " ".join(pts)
+
+            cpu_pts = polyline_points(cpu, y_cpu)
+            mem_pts = polyline_points(mem, y_mem)
+            fps_pts = polyline_points(fps, y_fps)
+
+            # X 轴标签抽样
+            step = max(1, n // 6)
+            x_labels = []
+            for i in range(0, n, step):
+                txt = labels[i]
+                x = x_at(i)
+                x_labels.append(
+                    f'<text x="{x:.1f}" y="{height-12}" font-size="10" fill="#666" text-anchor="middle">{_escape_xml(txt)}</text>'
+                )
+
+            # 画布与网格
+            grid = []
+            for k in range(5):
+                y = y0 + (y1 - y0) * (k / 4)
+                grid.append(f'<line x1="{x0}" y1="{y:.1f}" x2="{x1}" y2="{y:.1f}" stroke="#eee" />')
+
+            svg = f"""
+<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="性能趋势图">
+  <rect x="0" y="0" width="{width}" height="{height}" rx="4" ry="4" fill="#ffffff" stroke="#eeeeee"/>
+  {"".join(grid)}
+  <line x1="{x0}" y1="{y1}" x2="{x1}" y2="{y1}" stroke="#ccc"/>
+  <line x1="{x0}" y1="{y0}" x2="{x0}" y2="{y1}" stroke="#ccc"/>
+
+  <polyline fill="none" stroke="#ff6384" stroke-width="2" points="{cpu_pts}" />
+  <polyline fill="none" stroke="#36a2eb" stroke-width="2" points="{mem_pts}" />
+  <polyline fill="none" stroke="#4bc0c0" stroke-width="2" points="{fps_pts}" />
+
+  <g>
+    <rect x="{padding}" y="10" width="240" height="26" rx="4" ry="4" fill="#fff" stroke="#eee"/>
+    <circle cx="{padding+12}" cy="23" r="4" fill="#ff6384"/><text x="{padding+22}" y="27" font-size="11" fill="#333">CPU(%)</text>
+    <circle cx="{padding+82}" cy="23" r="4" fill="#36a2eb"/><text x="{padding+92}" y="27" font-size="11" fill="#333">Mem(MB)</text>
+    <circle cx="{padding+165}" cy="23" r="4" fill="#4bc0c0"/><text x="{padding+175}" y="27" font-size="11" fill="#333">FPS</text>
+  </g>
+
+  <g>
+    {"".join(x_labels)}
+  </g>
+</svg>
+""".strip()
+            return svg
+        except Exception as e:
+            logger.error(f"生成 SVG 性能图失败: {e}")
             return None
     
     def _get_default_template(self):
@@ -417,10 +513,12 @@ class ReportGenerator:
                 <h3>性能趋势</h3>
                 <div class="info-row">
                     <div class="info-value">
-                        {% if data.performance_chart_png_base64 %}
+                        {% if data.performance_chart_svg %}
+                        <div style="width:100%; overflow:auto;">{{ data.performance_chart_svg | safe }}</div>
+                        {% elif data.performance_chart_png_base64 %}
                         <img alt="performance chart" style="width:100%; max-height:420px; object-fit:contain; border:1px solid #eee; border-radius:4px; background:#fff;" src="data:image/png;base64,{{ data.performance_chart_png_base64 }}" />
                         {% else %}
-                        <div style="color:#666;">性能趋势图未生成（可能是 Jenkins/CSP 禁止脚本，或未安装 matplotlib）。</div>
+                        <div style="color:#666;">性能趋势图未生成（可能未采集性能数据，或缺少绘图库）。</div>
                         {% endif %}
                     </div>
                 </div>
@@ -470,7 +568,7 @@ class ReportGenerator:
         </html>
         """
         return Template(template_content)
-    
+
     def generate_json_report(self, data, output_file):
         """
         生成 JSON 格式的测试报告
@@ -508,45 +606,16 @@ class ReportGenerator:
             return self.generate_json_report(data, output_file)
         return self.generate_html_report(data, output_file)
 
-=======
 
-from jinja2 import Template
+def _escape_xml(text: str) -> str:
+    if text is None:
+        return ""
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
 
-
-class ReportGenerator:
-    def generate_html_report(self, data, output_file):
-        """
-        生成 HTML 格式的测试报告。
-        """
-        template = """
-        <html>
-        <head><title>Monkey Test Report</title></head>
-        <body>
-            <h1>Test Report</h1>
-            <h2>Device Info</h2>
-            <p>{{ data.device_info }}</p>
-            <h2>Package Name</h2>
-            <p>{{ data.package_name }}</p>
-            <h2>Device Version Name</h2>
-            <p>{{ data.device_version_name }}</p>
-            <h2>Start Time</h2>
-            <p>{{ data.start_time }}</p>
-            <h2>End Time</h2>
-            <p>{{ data.end_time }}</p>
-            <h2>Duration</h2>
-            <p>{{ data.duration }}</p>
-            <h2>Seed Value</h2>
-            <p>{{ data.seed_value }}</p>
-            <h2>Execution Count</h2>
-            <p>{{ data.execution_count }}</p>
-            <h2>Crash Count</h2>
-            <p>{{ data.crash_count }}</p>
-            <h2>Details</h2>
-            <pre>{{ data.details }}</pre>
-        </body>
-        </html>
-        """
-        rendered = Template(template).render(data=data)
-        with open(output_file, "w") as file:
-            file.write(rendered)
->>>>>>> bc185e8 (Monkey稳定性测试)
