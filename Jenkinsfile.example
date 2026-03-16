@@ -52,6 +52,25 @@ fi
 
 echo "应用版本: $APP_VERSION"
 
+echo "===== 获取测试时长 ====="
+
+DURATION=""
+if [ -f "$REPORT_FILE" ]; then
+    DURATION=$(grep -A2 "测试时长" "$REPORT_FILE" | grep -Eo ">[^<]+秒<" | grep -Eo "[^>]+" | head -1)
+fi
+if [ -z "$DURATION" ]; then
+    DURATION="未知"
+fi
+echo "测试时长: $DURATION"
+
+echo "===== 获取崩溃分类 ====="
+
+CRASH_SUMMARY=""
+if [ -f "$REPORT_FILE" ] && [ "$CRASH_COUNT" -gt 0 ]; then
+    # 提取 "XxxException: N次" 格式的崩溃分类
+    CRASH_SUMMARY=$(grep -Eo '[A-Za-z]+Exception: [0-9]+次|ANR: [0-9]+次|Other: [0-9]+次' "$REPORT_FILE" | head -5 | tr '\n' '，' | sed 's/，$//')
+fi
+
 echo "===== 发送飞书通知 ====="
 
 # 根据崩溃次数设置状态和卡片颜色
@@ -100,8 +119,9 @@ JSON=$(cat <<EOF
           },
           {
             "is_short": true,
-            "text": { "tag": "lark_md", "content": "**事件数量**\n${EVENT_COUNT}" }
+            "text": { "tag": "lark_md", "content": "**事件数量 / 时长**\n${EVENT_COUNT} 次 / ${DURATION}" }
           }
+          $([ -n "$CRASH_SUMMARY" ] && echo ",{\"is_short\": false, \"text\": { \"tag\": \"lark_md\", \"content\": \"**崩溃分类**\\n${CRASH_SUMMARY}\" }}")
         ]
       },
       {
