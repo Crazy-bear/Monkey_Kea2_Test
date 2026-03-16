@@ -15,7 +15,7 @@ class Config:
     支持从环境变量、配置文件和默认值读取配置
     """
     # 默认配置
-    DEFAULT_DEVICE_ID = "192.168.20.180:5555"  # 默认手机设备 ID
+    DEFAULT_DEVICE_ID = "192.168.20.152:5555"  # 默认手机设备 ID
     DEFAULT_PACKAGE_NAME = "com.aeke.fitnessmirror"  # 设备端测试应用包名
     DEFAULT_EVENT_COUNT = 300  # 默认事件数量
     
