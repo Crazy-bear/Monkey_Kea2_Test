@@ -342,128 +342,259 @@ class ReportGenerator:
                 <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">性能数据</h2>
                 <h3 style="color:#34495e;">性能趋势</h3>
 
-                <div style="position:relative;height:380px;margin-bottom:8px;">
-                    <canvas id="perfChart"></canvas>
+                <div style="position:relative;margin-bottom:4px;">
+                    <canvas id="perfChart" style="width:100%;display:block;"></canvas>
+                    <!-- tooltip 浮层 -->
+                    <div id="perfTooltip" style="display:none;position:absolute;background:rgba(30,30,30,0.88);color:#fff;padding:10px 14px;border-radius:6px;font-size:13px;pointer-events:none;white-space:nowrap;z-index:10;"></div>
                 </div>
-                <p style="font-size:12px;color:#999;margin:0 0 20px 0;">💡 鼠标悬停查看数值 &nbsp;·&nbsp; 滚轮缩放 &nbsp;·&nbsp; 拖拽平移</p>
-
-                <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-                <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
-                <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+                <p style="font-size:12px;color:#999;margin:4px 0 20px 0;">💡 鼠标悬停查看数值 &nbsp;·&nbsp; 滚轮缩放 X 轴 &nbsp;·&nbsp; 拖拽平移</p>
                 <script>
                 (function() {
                     var raw = {{ data.performance_data | tojson }};
-                    var labels = raw.map(function(d){ return d.timestamp || ''; });
-                    var cpu = raw.map(function(d){ return d.cpu; });
-                    var mem = raw.map(function(d){ return d.mem; });
-                    var fps = raw.map(function(d){ return d.fps; });
 
-                    // 超过200点时抽样，保持图表流畅
+                    // 抽样：超过200点时降采样
                     if (raw.length > 200) {
                         var step = Math.ceil(raw.length / 200);
-                        labels = labels.filter(function(_,i){ return i % step === 0; });
-                        cpu    = cpu.filter(function(_,i){ return i % step === 0; });
-                        mem    = mem.filter(function(_,i){ return i % step === 0; });
-                        fps    = fps.filter(function(_,i){ return i % step === 0; });
+                        raw = raw.filter(function(_,i){ return i % step === 0; });
                     }
 
-                    new Chart(document.getElementById('perfChart').getContext('2d'), {
-                        type: 'line',
-                        data: {
-                            labels: labels,
-                            datasets: [
-                                {
-                                    label: 'CPU (%)',
-                                    data: cpu,
-                                    borderColor: '#e74c3c',
-                                    backgroundColor: 'rgba(231,76,60,0.07)',
-                                    borderWidth: 2,
-                                    pointRadius: 2,
-                                    pointHoverRadius: 6,
-                                    tension: 0.3,
-                                    fill: true,
-                                    yAxisID: 'yCpu'
-                                },
-                                {
-                                    label: 'Mem (MB)',
-                                    data: mem,
-                                    borderColor: '#3498db',
-                                    backgroundColor: 'rgba(52,152,219,0.07)',
-                                    borderWidth: 2,
-                                    pointRadius: 2,
-                                    pointHoverRadius: 6,
-                                    tension: 0.3,
-                                    fill: true,
-                                    yAxisID: 'yMem'
-                                },
-                                {
-                                    label: 'FPS',
-                                    data: fps,
-                                    borderColor: '#2ecc71',
-                                    backgroundColor: 'rgba(46,204,113,0.07)',
-                                    borderWidth: 2,
-                                    pointRadius: 2,
-                                    pointHoverRadius: 6,
-                                    tension: 0.3,
-                                    fill: true,
-                                    yAxisID: 'yFps'
-                                }
-                            ]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            interaction: { mode: 'index', intersect: false },
-                            plugins: {
-                                legend: {
-                                    position: 'top',
-                                    labels: { usePointStyle: true, padding: 20, font: { size: 13 } }
-                                },
-                                tooltip: {
-                                    backgroundColor: 'rgba(30,30,30,0.85)',
-                                    titleFont: { size: 12 },
-                                    bodyFont: { size: 13 },
-                                    padding: 12,
-                                    callbacks: {
-                                        label: function(ctx) {
-                                            var v = ctx.parsed.y;
-                                            if (ctx.dataset.label === 'CPU (%)') return '  CPU: ' + v.toFixed(2) + ' %';
-                                            if (ctx.dataset.label === 'Mem (MB)') return '  Mem: ' + v.toFixed(2) + ' MB';
-                                            if (ctx.dataset.label === 'FPS') return '  FPS: ' + v.toFixed(2);
-                                            return ctx.dataset.label + ': ' + v;
-                                        }
-                                    }
-                                },
-                                zoom: {
-                                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
-                                    pan: { enabled: true, mode: 'x' }
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    ticks: { maxTicksLimit: 8, maxRotation: 30, font: { size: 11 } },
-                                    grid: { color: 'rgba(0,0,0,0.04)' }
-                                },
-                                yCpu: {
-                                    type: 'linear', position: 'left',
-                                    title: { display: true, text: 'CPU (%)', color: '#e74c3c', font: { size: 12 } },
-                                    ticks: { color: '#e74c3c' },
-                                    grid: { color: 'rgba(0,0,0,0.04)' }
-                                },
-                                yMem: {
-                                    type: 'linear', position: 'left',
-                                    title: { display: true, text: 'Mem (MB)', color: '#3498db', font: { size: 12 } },
-                                    ticks: { color: '#3498db' },
-                                    grid: { drawOnChartArea: false }
-                                },
-                                yFps: {
-                                    type: 'linear', position: 'right',
-                                    title: { display: true, text: 'FPS', color: '#2ecc71', font: { size: 12 } },
-                                    ticks: { color: '#2ecc71' },
-                                    grid: { drawOnChartArea: false }
-                                }
-                            }
+                    var labels = raw.map(function(d){ return d.timestamp || ''; });
+                    var cpu    = raw.map(function(d){ return +d.cpu || 0; });
+                    var mem    = raw.map(function(d){ return +d.mem || 0; });
+                    var fps    = raw.map(function(d){ return +d.fps || 0; });
+                    var n      = raw.length;
+
+                    var canvas  = document.getElementById('perfChart');
+                    var tooltip = document.getElementById('perfTooltip');
+                    var W = canvas.parentElement.clientWidth || 900;
+                    var H = 380;
+                    canvas.width  = W;
+                    canvas.height = H;
+                    var ctx = canvas.getContext('2d');
+
+                    // 布局常量
+                    var PAD_L = 72, PAD_R = 72, PAD_T = 36, PAD_B = 56;
+                    var chartW = W - PAD_L - PAD_R;
+                    var chartH = H - PAD_T - PAD_B;
+
+                    // 视口（用于缩放/平移）
+                    var viewStart = 0, viewEnd = n - 1;
+
+                    function minMax(arr, s, e) {
+                        var mn = Infinity, mx = -Infinity;
+                        for (var i = s; i <= e; i++) { if (arr[i] < mn) mn = arr[i]; if (arr[i] > mx) mx = arr[i]; }
+                        if (mn === mx) { mn -= 1; mx += 1; }
+                        return [mn, mx];
+                    }
+
+                    function niceStep(range, ticks) {
+                        var raw = range / ticks;
+                        var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+                        var norm = raw / mag;
+                        var nice = norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10;
+                        return nice * mag;
+                    }
+
+                    function xAt(i) { return PAD_L + (i - viewStart) / (viewEnd - viewStart) * chartW; }
+                    function yAt(v, mn, mx) { return PAD_T + chartH - (v - mn) / (mx - mn) * chartH; }
+
+                    function draw() {
+                        ctx.clearRect(0, 0, W, H);
+                        var vs = Math.round(viewStart), ve = Math.round(viewEnd);
+
+                        var cpuMM = minMax(cpu, vs, ve);
+                        var memMM = minMax(mem, vs, ve);
+                        var fpsMM = minMax(fps, vs, ve);
+
+                        // 背景
+                        ctx.fillStyle = '#fafafa';
+                        ctx.fillRect(PAD_L, PAD_T, chartW, chartH);
+
+                        // 网格 + 左Y轴(CPU) 刻度
+                        ctx.strokeStyle = '#e8e8e8'; ctx.lineWidth = 1;
+                        var cpuStep = niceStep(cpuMM[1] - cpuMM[0], 5);
+                        var cpuBase = Math.floor(cpuMM[0] / cpuStep) * cpuStep;
+                        for (var v = cpuBase; v <= cpuMM[1] + cpuStep; v += cpuStep) {
+                            var y = yAt(v, cpuMM[0], cpuMM[1]);
+                            if (y < PAD_T || y > PAD_T + chartH) continue;
+                            ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + chartW, y); ctx.stroke();
+                            ctx.fillStyle = '#e74c3c'; ctx.font = '11px Arial'; ctx.textAlign = 'right';
+                            ctx.fillText(v.toFixed(1) + '%', PAD_L - 6, y + 4);
                         }
+
+                        // 右Y轴(FPS) 刻度
+                        var fpsStep = niceStep(fpsMM[1] - fpsMM[0], 5);
+                        var fpsBase = Math.floor(fpsMM[0] / fpsStep) * fpsStep;
+                        for (var fv = fpsBase; fv <= fpsMM[1] + fpsStep; fv += fpsStep) {
+                            var fy = yAt(fv, fpsMM[0], fpsMM[1]);
+                            if (fy < PAD_T || fy > PAD_T + chartH) continue;
+                            ctx.fillStyle = '#2ecc71'; ctx.textAlign = 'left';
+                            ctx.fillText(fv.toFixed(1), PAD_L + chartW + 6, fy + 4);
+                        }
+
+                        // X轴刻度
+                        var tickCount = Math.min(8, ve - vs + 1);
+                        var tickStep  = Math.max(1, Math.round((ve - vs) / tickCount));
+                        ctx.fillStyle = '#666'; ctx.font = '11px Arial'; ctx.textAlign = 'center';
+                        for (var ti = vs; ti <= ve; ti += tickStep) {
+                            var tx = xAt(ti);
+                            ctx.beginPath(); ctx.strokeStyle = '#ccc'; ctx.moveTo(tx, PAD_T + chartH); ctx.lineTo(tx, PAD_T + chartH + 4); ctx.stroke();
+                            var lbl = labels[ti] || '';
+                            if (lbl.length > 19) lbl = lbl.slice(11); // 只显示时间部分
+                            ctx.fillText(lbl, tx, PAD_T + chartH + 16);
+                        }
+
+                        // 轴边框
+                        ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1;
+                        ctx.strokeRect(PAD_L, PAD_T, chartW, chartH);
+
+                        // 折线绘制函数
+                        function drawLine(arr, mm, color, alpha) {
+                            ctx.beginPath();
+                            ctx.strokeStyle = color; ctx.lineWidth = 2;
+                            for (var i = vs; i <= ve; i++) {
+                                var px = xAt(i), py = yAt(arr[i], mm[0], mm[1]);
+                                if (i === vs) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                            }
+                            ctx.stroke();
+                            // 填充
+                            ctx.lineTo(xAt(ve), PAD_T + chartH);
+                            ctx.lineTo(xAt(vs), PAD_T + chartH);
+                            ctx.closePath();
+                            ctx.fillStyle = alpha;
+                            ctx.fill();
+                        }
+
+                        drawLine(cpu, cpuMM, '#e74c3c', 'rgba(231,76,60,0.07)');
+                        drawLine(mem, memMM, '#3498db', 'rgba(52,152,219,0.07)');
+                        drawLine(fps, fpsMM, '#2ecc71', 'rgba(46,204,113,0.07)');
+
+                        // Y轴标题
+                        ctx.save();
+                        ctx.translate(14, PAD_T + chartH / 2);
+                        ctx.rotate(-Math.PI / 2);
+                        ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
+                        ctx.fillText('CPU / Mem', 0, 0);
+                        ctx.restore();
+
+                        ctx.save();
+                        ctx.translate(W - 14, PAD_T + chartH / 2);
+                        ctx.rotate(Math.PI / 2);
+                        ctx.fillStyle = '#2ecc71'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
+                        ctx.fillText('FPS', 0, 0);
+                        ctx.restore();
+
+                        // 图例
+                        var legends = [['CPU (%)', '#e74c3c'], ['Mem (MB)', '#3498db'], ['FPS', '#2ecc71']];
+                        var lx = PAD_L;
+                        legends.forEach(function(lg) {
+                            ctx.fillStyle = lg[1];
+                            ctx.fillRect(lx, 10, 14, 14);
+                            ctx.fillStyle = '#333'; ctx.font = '12px Arial'; ctx.textAlign = 'left';
+                            ctx.fillText(lg[0], lx + 18, 22);
+                            lx += ctx.measureText(lg[0]).width + 40;
+                        });
+                    }
+
+                    draw();
+
+                    // ---- 交互：hover tooltip ----
+                    canvas.addEventListener('mousemove', function(e) {
+                        var rect = canvas.getBoundingClientRect();
+                        var mx = e.clientX - rect.left;
+                        var my = e.clientY - rect.top;
+                        if (mx < PAD_L || mx > PAD_L + chartW || my < PAD_T || my > PAD_T + chartH) {
+                            tooltip.style.display = 'none';
+                            draw();
+                            return;
+                        }
+                        var vs = Math.round(viewStart), ve = Math.round(viewEnd);
+                        var idx = Math.round(vs + (mx - PAD_L) / chartW * (ve - vs));
+                        idx = Math.max(vs, Math.min(ve, idx));
+
+                        var cpuMM = minMax(cpu, vs, ve);
+                        var memMM = minMax(mem, vs, ve);
+                        var fpsMM = minMax(fps, vs, ve);
+
+                        draw();
+
+                        // 竖线
+                        var lx = xAt(idx);
+                        ctx.beginPath(); ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1;
+                        ctx.setLineDash([4, 3]);
+                        ctx.moveTo(lx, PAD_T); ctx.lineTo(lx, PAD_T + chartH);
+                        ctx.stroke(); ctx.setLineDash([]);
+
+                        // 圆点
+                        [[cpu, cpuMM, '#e74c3c'], [mem, memMM, '#3498db'], [fps, fpsMM, '#2ecc71']].forEach(function(s) {
+                            var py = yAt(s[0][idx], s[1][0], s[1][1]);
+                            ctx.beginPath(); ctx.arc(lx, py, 5, 0, Math.PI * 2);
+                            ctx.fillStyle = s[2]; ctx.fill();
+                            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                        });
+
+                        // tooltip 内容
+                        tooltip.innerHTML =
+                            '<div style="font-weight:bold;margin-bottom:6px;color:#ddd;">' + (labels[idx] || '') + '</div>' +
+                            '<div style="color:#e74c3c;">● CPU: ' + cpu[idx].toFixed(2) + ' %</div>' +
+                            '<div style="color:#5dade2;">● Mem: ' + mem[idx].toFixed(2) + ' MB</div>' +
+                            '<div style="color:#2ecc71;">● FPS: ' + fps[idx].toFixed(2) + '</div>';
+
+                        var tx = lx + 14;
+                        if (tx + 180 > W) tx = lx - 190;
+                        tooltip.style.left = tx + 'px';
+                        tooltip.style.top  = (PAD_T + 10) + 'px';
+                        tooltip.style.display = 'block';
+                    });
+
+                    canvas.addEventListener('mouseleave', function() {
+                        tooltip.style.display = 'none';
+                        draw();
+                    });
+
+                    // ---- 交互：滚轮缩放 ----
+                    canvas.addEventListener('wheel', function(e) {
+                        e.preventDefault();
+                        var rect = canvas.getBoundingClientRect();
+                        var mx = e.clientX - rect.left;
+                        var ratio = (mx - PAD_L) / chartW;
+                        ratio = Math.max(0, Math.min(1, ratio));
+                        var span = viewEnd - viewStart;
+                        var factor = e.deltaY > 0 ? 1.15 : 0.87;
+                        var newSpan = Math.max(4, Math.min(n - 1, span * factor));
+                        var center = viewStart + ratio * span;
+                        viewStart = Math.max(0, center - ratio * newSpan);
+                        viewEnd   = Math.min(n - 1, viewStart + newSpan);
+                        if (viewEnd === n - 1) viewStart = Math.max(0, viewEnd - newSpan);
+                        draw();
+                    }, { passive: false });
+
+                    // ---- 交互：拖拽平移 ----
+                    var dragX = null, dragVS = null;
+                    canvas.addEventListener('mousedown', function(e) {
+                        dragX = e.clientX; dragVS = viewStart;
+                        canvas.style.cursor = 'grabbing';
+                    });
+                    window.addEventListener('mousemove', function(e) {
+                        if (dragX === null) return;
+                        var rect = canvas.getBoundingClientRect();
+                        var dx = e.clientX - dragX;
+                        var span = viewEnd - viewStart;
+                        var shift = -dx / chartW * span;
+                        viewStart = Math.max(0, Math.min(n - 1 - span, dragVS + shift));
+                        viewEnd   = viewStart + span;
+                        draw();
+                    });
+                    window.addEventListener('mouseup', function() {
+                        dragX = null; canvas.style.cursor = 'default';
+                    });
+
+                    // 窗口resize重绘
+                    window.addEventListener('resize', function() {
+                        W = canvas.parentElement.clientWidth || 900;
+                        canvas.width = W;
+                        chartW = W - PAD_L - PAD_R;
+                        draw();
                     });
                 })();
                 </script>
