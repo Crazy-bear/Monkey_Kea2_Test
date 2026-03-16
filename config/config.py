@@ -35,6 +35,14 @@ class Config:
             PACKAGE_NAME = config['DEFAULT'].get('PACKAGE_NAME', PACKAGE_NAME)
             EVENT_COUNT = int(config['DEFAULT'].get('EVENT_COUNT', EVENT_COUNT))
     
+    # 性能阈值配置
+    PERF_CPU_THRESHOLD = float(os.environ.get('PERF_CPU_THRESHOLD', 80.0))    # CPU 使用率上限（%）
+    PERF_MEM_THRESHOLD = float(os.environ.get('PERF_MEM_THRESHOLD', 512.0))   # 内存使用上限（MB）
+    PERF_FPS_THRESHOLD = float(os.environ.get('PERF_FPS_THRESHOLD', 30.0))    # FPS 下限
+    # 内存泄漏检测：连续 N 个采样点内存持续增长则告警
+    PERF_MEM_LEAK_WINDOW = int(os.environ.get('PERF_MEM_LEAK_WINDOW', 10))    # 滑动窗口大小
+    PERF_MEM_LEAK_GROWTH = float(os.environ.get('PERF_MEM_LEAK_GROWTH', 20.0))  # 窗口内增长阈值（MB）
+
     # 随机种子
     SEED = int(datetime.datetime.now().strftime("%Y%m%d%H%M"))  # 随机种子按"年月日时分"格式生成
     # SEED = 202512101346  # 指定种子数
@@ -59,6 +67,23 @@ class Config:
             logger.error(f"获取应用信息失败: {e}")
             self.device_version_name = "Unknown"
 
+    def _get_firmware_version(self):
+        """
+        通过 adb 获取主板固件版本（ro.build.display.id）
+        """
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["adb", "-s", self.DEVICE_ID, "shell", "getprop", "ro.build.display.id"],
+                shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, timeout=10
+            )
+            fw = result.stdout.strip()
+            return fw if fw else "Unknown"
+        except Exception as e:
+            logger.error(f"获取固件版本失败: {e}")
+            return "Unknown"
+
     @property
     def DeviceVersionName(self):
         """
@@ -67,6 +92,13 @@ class Config:
         if self.device_version_name is None:
             self._get_app_info()
         return self.device_version_name or "Unknown"
+
+    @property
+    def FirmwareVersion(self):
+        """
+        获取主板固件版本
+        """
+        return self._get_firmware_version()
 
     def validate(self):
         """

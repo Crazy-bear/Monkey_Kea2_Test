@@ -206,6 +206,7 @@ def main():
         "device_id": config.DEVICE_ID,
         "package_name": config.PACKAGE_NAME,
         "device_version_name": config.DeviceVersionName,
+        "firmware_version": config.FirmwareVersion,
         "start_time": start_time,
         "end_time": end_time,
         "duration": duration,
@@ -215,6 +216,8 @@ def main():
         "crashes": crashes,
         "log_analysis": log_analysis,
         "performance_data": performance_data,
+        "performance_thresholds": performance_monitor.get_thresholds(),
+        "memory_leak_analysis": performance_monitor.get_leak_analysis(),
         "details": f"Monkey 测试执行完成，共执行 {config.EVENT_COUNT} 个事件，检测到 {crash_count} 次崩溃。",
     }
     report_generator.generate_report(report_data, report_file, args.format)
