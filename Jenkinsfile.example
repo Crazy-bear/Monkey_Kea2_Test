@@ -1,65 +1,130 @@
-// Jenkins 流水线示例：Monkey 自动化测试
-// 使用方法：复制为 Jenkinsfile 或按需修改
-// 要求：Jenkins 节点已安装 Python 3.7+、ADB（执行完整测试时需连接设备）
+#!/bin/bash
 
-pipeline {
-    agent any
-    environment {
-        MONKEY_DEVICE_ID = "${params.DEVICE_ID ?: ''}"
-        MONKEY_PACKAGE_NAME = "${params.PACKAGE_NAME ?: 'com.aeke.fitnessmirror'}"
-        MONKEY_EVENT_COUNT = "${params.EVENT_COUNT ?: '300'}"
-    }
-    parameters {
-        string(name: 'DEVICE_ID', defaultValue: '192.168.20.81:5555', description: '设备 ID')
-        string(name: 'PACKAGE_NAME', defaultValue: 'com.aeke.fitnessmirror', description: '应用包名')
-        string(name: 'EVENT_COUNT', defaultValue: '300', description: 'Monkey 事件数')
-        booleanParam(name: 'SKIP_FULL_TEST', defaultValue: true, description: '仅做校验与单元测试（不跑 Monkey）')
-    }
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-        stage('Install') {
-            steps {
-                sh 'pip install -r requirements.txt'
-            }
-        }
-        stage('Validate Config') {
-            steps {
-                sh 'python main.py --validate-only'
-            }
-        }
-        stage('Unit Tests') {
-            steps {
-                sh 'pytest tests/ -v --tb=short'
-            }
-        }
-        stage('Monkey Test') {
-            when {
-                expression { return !params.SKIP_FULL_TEST }
-            }
-            steps {
-                sh "python main.py --device ${params.DEVICE_ID} --package ${params.PACKAGE_NAME} --events ${params.EVENT_COUNT} --output outputs --format html"
-            }
-            post {
-                always {
-                    publishHTML([
-                        allowMissing: true,
-                        reportDir: 'outputs',
-                        reportFiles: '**/report.html',
-                        reportName: 'Monkey Report',
-                        reportTitles: ''
-                    ])
-                    archiveArtifacts artifacts: 'outputs/**', allowEmptyArchive: true
-                }
-            }
-        }
-    }
-    post {
-        always {
-            cleanWs(deleteDirs: true, patterns: [[pattern: '.venv/**', type: 'INCLUDE']])
-        }
-    }
+JENKINS_URL="https://jenkins.aeke.net"
+JOB_NAME="monkey-auto-test"
+VIEW_NAME="auto-test"
+
+echo "===== 查找测试报告 ====="
+
+REPORT_FILE=$(find outputs -name "*.html" | sort | tail -1)
+
+if [ -z "$REPORT_FILE" ]; then
+    echo "未找到报告文件"
+    REPORT_URL="${JENKINS_URL}/view/${VIEW_NAME}/job/${JOB_NAME}/${BUILD_NUMBER}/artifact/outputs/"
+else
+    echo "报告路径: $REPORT_FILE"
+    RELATIVE_PATH=${REPORT_FILE#outputs/}
+    REPORT_URL="${JENKINS_URL}/view/${VIEW_NAME}/job/${JOB_NAME}/${BUILD_NUMBER}/artifact/outputs/${RELATIVE_PATH}"
+fi
+
+# 复制报告到固定路径，供 HTML Publisher 使用（避免通配符问题）
+if [ -f "$REPORT_FILE" ]; then
+    mkdir -p outputs/latest
+    cp "$REPORT_FILE" outputs/latest/report.html
+fi
+
+echo "===== 解析崩溃次数 ====="
+
+CRASH_COUNT=0
+
+if [ -f "$REPORT_FILE" ]; then
+    # 从 HTML div 结构中提取崩溃次数（兼容内联样式格式）
+    CRASH_COUNT=$(grep -A2 "崩溃次数" "$REPORT_FILE" | grep -Eo ">[0-9]+<" | grep -Eo "[0-9]+" | head -1)
+    if [ -z "$CRASH_COUNT" ]; then
+        CRASH_COUNT=0
+    fi
+fi
+
+echo "崩溃次数: $CRASH_COUNT"
+
+echo "===== 获取应用版本 ====="
+
+APP_VERSION=""
+
+if [ -f "$REPORT_FILE" ]; then
+    # 从 HTML div 结构中提取应用版本（兼容内联样式格式）
+    APP_VERSION=$(grep -A2 "应用版本" "$REPORT_FILE" | grep -Eo ">[0-9]+(\.[0-9]+)+<" | grep -Eo "[0-9]+(\.[0-9]+)+" | head -1)
+fi
+
+if [ -z "$APP_VERSION" ]; then
+    APP_VERSION="未知"
+fi
+
+echo "应用版本: $APP_VERSION"
+
+echo "===== 发送飞书通知 ====="
+
+# 根据崩溃次数设置状态和卡片颜色
+if [ "$CRASH_COUNT" -eq 0 ]; then
+    TEST_STATUS="✅ 通过"
+    CARD_COLOR="green"
+else
+    TEST_STATUS="❌ 失败（崩溃 ${CRASH_COUNT} 次）"
+    CARD_COLOR="red"
+fi
+
+JSON=$(cat <<EOF
+{
+  "msg_type": "interactive",
+  "card": {
+    "header": {
+      "title": {
+        "tag": "plain_text",
+        "content": "Monkey 稳定性测试报告"
+      },
+      "template": "${CARD_COLOR}"
+    },
+    "elements": [
+      {
+        "tag": "div",
+        "fields": [
+          {
+            "is_short": true,
+            "text": { "tag": "lark_md", "content": "**构建编号**\n${BUILD_NUMBER}" }
+          },
+          {
+            "is_short": true,
+            "text": { "tag": "lark_md", "content": "**测试结果**\n${TEST_STATUS}" }
+          },
+          {
+            "is_short": true,
+            "text": { "tag": "lark_md", "content": "**应用包名**\n${PACKAGE_NAME}" }
+          },
+          {
+            "is_short": true,
+            "text": { "tag": "lark_md", "content": "**应用版本**\n${APP_VERSION}" }
+          },
+          {
+            "is_short": true,
+            "text": { "tag": "lark_md", "content": "**设备ID**\n${DEVICE_ID}" }
+          },
+          {
+            "is_short": true,
+            "text": { "tag": "lark_md", "content": "**事件数量**\n${EVENT_COUNT}" }
+          }
+        ]
+      },
+      {
+        "tag": "action",
+        "actions": [
+          {
+            "tag": "button",
+            "text": { "tag": "plain_text", "content": "查看详细报告" },
+            "type": "primary",
+            "url": "${REPORT_URL}"
+          }
+        ]
+      }
+    ]
+  }
 }
+EOF
+)
+
+curl -s -X POST \
+  -H "Content-Type: application/json" \
+  -d "$JSON" \
+  https://open.feishu.cn/open-apis/bot/v2/hook/a13b2176-4f1f-4cb5-a88e-e656abc9f25f
+
+echo ""
+echo "===== 完成 ====="
