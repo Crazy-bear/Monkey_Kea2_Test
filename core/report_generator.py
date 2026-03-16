@@ -306,7 +306,8 @@ class ReportGenerator:
                 <h3 style="color:#34495e;">崩溃分类</h3>
                 <div style="margin-bottom:20px;">
                     {% for category, count in data.log_analysis.crash_categories.items() %}
-                    <details style="margin-bottom:4px;">
+                    {# 第一个默认展开，其余折叠 #}
+                    <details style="margin-bottom:4px;" {% if loop.first %}open{% endif %}>
                         <summary style="cursor:pointer;padding:6px 8px;background-color:#f0f0f0;border-radius:3px;">
                             <strong>{{ category }}: {{ count }}次</strong>
                         </summary>
@@ -372,7 +373,7 @@ class ReportGenerator:
                     var ctx = canvas.getContext('2d');
 
                     // 布局常量
-                    var PAD_L = 72, PAD_R = 72, PAD_T = 36, PAD_B = 56;
+                    var PAD_L = 120, PAD_R = 72, PAD_T = 36, PAD_B = 56;
                     var chartW = W - PAD_L - PAD_R;
                     var chartH = H - PAD_T - PAD_B;
 
@@ -409,7 +410,7 @@ class ReportGenerator:
                         ctx.fillStyle = '#fafafa';
                         ctx.fillRect(PAD_L, PAD_T, chartW, chartH);
 
-                        // 网格 + 左Y轴(CPU) 刻度
+                        // 左Y轴(CPU) 刻度 — 红色
                         ctx.strokeStyle = '#e8e8e8'; ctx.lineWidth = 1;
                         var cpuStep = niceStep(cpuMM[1] - cpuMM[0], 5);
                         var cpuBase = Math.floor(cpuMM[0] / cpuStep) * cpuStep;
@@ -419,6 +420,16 @@ class ReportGenerator:
                             ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + chartW, y); ctx.stroke();
                             ctx.fillStyle = '#e74c3c'; ctx.font = '11px Arial'; ctx.textAlign = 'right';
                             ctx.fillText(v.toFixed(1) + '%', PAD_L - 6, y + 4);
+                        }
+
+                        // 左Y轴第二列(Mem) 刻度 — 蓝色，紧贴图表左侧内侧
+                        var memStep = niceStep(memMM[1] - memMM[0], 5);
+                        var memBase = Math.floor(memMM[0] / memStep) * memStep;
+                        for (var mv = memBase; mv <= memMM[1] + memStep; mv += memStep) {
+                            var my = yAt(mv, memMM[0], memMM[1]);
+                            if (my < PAD_T || my > PAD_T + chartH) continue;
+                            ctx.fillStyle = '#3498db'; ctx.font = '11px Arial'; ctx.textAlign = 'right';
+                            ctx.fillText(mv.toFixed(0) + 'M', PAD_L - 6 - 52, my + 4);
                         }
 
                         // 右Y轴(FPS) 刻度
@@ -472,8 +483,15 @@ class ReportGenerator:
                         ctx.save();
                         ctx.translate(14, PAD_T + chartH / 2);
                         ctx.rotate(-Math.PI / 2);
-                        ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
-                        ctx.fillText('CPU / Mem', 0, 0);
+                        ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+                        ctx.fillText('CPU(%)', 0, 0);
+                        ctx.restore();
+
+                        ctx.save();
+                        ctx.translate(36, PAD_T + chartH / 2);
+                        ctx.rotate(-Math.PI / 2);
+                        ctx.fillStyle = '#3498db'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+                        ctx.fillText('Mem(MB)', 0, 0);
                         ctx.restore();
 
                         ctx.save();
@@ -600,30 +618,37 @@ class ReportGenerator:
 
                 <h3 style="color:#34495e;">性能统计</h3>
                 <table style="width:100%;border-collapse:collapse;">
+                    <tr style="background-color:#f8f9fa;">
+                        <td style="font-weight:bold;width:160px;padding:6px 8px;border:1px solid #dee2e6;color:#666;">指标</td>
+                        <td style="font-weight:bold;padding:6px 8px;border:1px solid #dee2e6;color:#e74c3c;text-align:center;">平均值</td>
+                        <td style="font-weight:bold;padding:6px 8px;border:1px solid #dee2e6;color:#e67e22;text-align:center;">最大值</td>
+                        <td style="font-weight:bold;padding:6px 8px;border:1px solid #dee2e6;color:#27ae60;text-align:center;">最小值</td>
+                    </tr>
+                    {% if data.performance_data and (data.performance_data | length) > 0 %}
+                    {% set cpu_vals = data.performance_data | map(attribute='cpu') | list %}
+                    {% set mem_vals = data.performance_data | map(attribute='mem') | list %}
+                    {% set fps_vals = data.performance_data | map(attribute='fps') | list %}
                     <tr>
-                        <td style="font-weight:bold;width:150px;padding:6px 0;">平均CPU使用率:</td>
-                        <td style="padding:6px 0;">
-                            {% if data.performance_data and (data.performance_data | length) > 0 %}
-                            {{ "%.2f" | format((data.performance_data | map(attribute='cpu') | sum) / (data.performance_data | length)) }}%
-                            {% else %}无数据{% endif %}
-                        </td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;font-weight:bold;">CPU 使用率</td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;text-align:center;">{{ "%.2f" | format(cpu_vals | sum / cpu_vals | length) }}%</td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;text-align:center;color:#e67e22;">{{ "%.2f" | format(cpu_vals | max) }}%</td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;text-align:center;color:#27ae60;">{{ "%.2f" | format(cpu_vals | min) }}%</td>
+                    </tr>
+                    <tr style="background-color:#f8f9fa;">
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;font-weight:bold;">内存使用量</td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;text-align:center;">{{ "%.2f" | format(mem_vals | sum / mem_vals | length) }} MB</td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;text-align:center;color:#e67e22;">{{ "%.2f" | format(mem_vals | max) }} MB</td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;text-align:center;color:#27ae60;">{{ "%.2f" | format(mem_vals | min) }} MB</td>
                     </tr>
                     <tr>
-                        <td style="font-weight:bold;padding:6px 0;">平均内存使用量:</td>
-                        <td style="padding:6px 0;">
-                            {% if data.performance_data and (data.performance_data | length) > 0 %}
-                            {{ "%.2f" | format((data.performance_data | map(attribute='mem') | sum) / (data.performance_data | length)) }} MB
-                            {% else %}无数据{% endif %}
-                        </td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;font-weight:bold;">FPS</td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;text-align:center;">{{ "%.2f" | format(fps_vals | sum / fps_vals | length) }}</td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;text-align:center;color:#27ae60;">{{ "%.2f" | format(fps_vals | max) }}</td>
+                        <td style="padding:6px 8px;border:1px solid #dee2e6;text-align:center;color:#e67e22;">{{ "%.2f" | format(fps_vals | min) }}</td>
                     </tr>
-                    <tr>
-                        <td style="font-weight:bold;padding:6px 0;">平均FPS:</td>
-                        <td style="padding:6px 0;">
-                            {% if data.performance_data and (data.performance_data | length) > 0 %}
-                            {{ "%.2f" | format((data.performance_data | map(attribute='fps') | sum) / (data.performance_data | length)) }}
-                            {% else %}无数据{% endif %}
-                        </td>
-                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" style="padding:8px;border:1px solid #dee2e6;color:#666;">无数据</td></tr>
+                    {% endif %}
                 </table>
             </div>
             {% else %}
