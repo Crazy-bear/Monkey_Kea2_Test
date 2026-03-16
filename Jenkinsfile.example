@@ -52,6 +52,20 @@ fi
 
 echo "应用版本: $APP_VERSION"
 
+echo "===== 获取主板固件 ====="
+
+FIRMWARE_VERSION=""
+
+if [ -f "$REPORT_FILE" ]; then
+    FIRMWARE_VERSION=$(grep "主板固件" "$REPORT_FILE" | grep -Eo "<td[^>]*>[^<]+</td>" | tail -1 | sed 's/<[^>]*>//g' | tr -d ' ')
+fi
+
+if [ -z "$FIRMWARE_VERSION" ]; then
+    FIRMWARE_VERSION="未知"
+fi
+
+echo "主板固件: $FIRMWARE_VERSION"
+
 echo "===== 获取测试时长 ====="
 
 DURATION=""
@@ -113,6 +127,10 @@ JSON=$(cat <<EOF
           {
             "is_short": true,
             "text": { "tag": "lark_md", "content": "**应用版本**\n${APP_VERSION}" }
+          },
+          {
+            "is_short": true,
+            "text": { "tag": "lark_md", "content": "**主板固件**\n${FIRMWARE_VERSION}" }
           },
           {
             "is_short": true,
