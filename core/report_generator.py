@@ -787,15 +787,38 @@ class ReportGenerator:
                     <strong style="color:#856404;">⚠ 疑似内存泄漏</strong>
                     <span style="color:#856404;margin-left:8px;">
                         监控期间内存净增长 {{ "%.1f" | format(data.memory_leak_analysis.total_growth_mb) }} MB，
-                        检测到 {{ data.memory_leak_analysis.leak_segments }} 段持续增长区间（图表橙色区域）。
+                        检测到 {{ data.memory_leak_analysis.leak_segments }} 段持续增长区间（图表橙色区域），
+                        平均泄漏速率 {{ "%.1f" | format(data.memory_leak_analysis.leak_rate_mb_per_min | default(0)) }} MB/min。
                         建议检查是否存在未释放的资源或循环引用。
                     </span>
                     {% if data.memory_leak_analysis.details %}
-                    <ul style="margin:8px 0 0 0;padding-left:20px;font-size:13px;color:#856404;">
+                    <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;">
+                        <tr style="background-color:#ffeeba;">
+                            <td style="padding:5px 8px;border:1px solid #ffc107;font-weight:bold;color:#856404;">时间段</td>
+                            <td style="padding:5px 8px;border:1px solid #ffc107;font-weight:bold;color:#856404;text-align:center;">增长量</td>
+                            <td style="padding:5px 8px;border:1px solid #ffc107;font-weight:bold;color:#856404;text-align:center;">速率</td>
+                            <td style="padding:5px 8px;border:1px solid #ffc107;font-weight:bold;color:#856404;text-align:center;">可信度 R²</td>
+                            <td style="padding:5px 8px;border:1px solid #ffc107;font-weight:bold;color:#856404;text-align:center;">泄漏类型</td>
+                            <td style="padding:5px 8px;border:1px solid #ffc107;font-weight:bold;color:#856404;text-align:center;">分项增长</td>
+                        </tr>
                         {% for seg in data.memory_leak_analysis.details %}
-                        <li>{{ seg.start_time }} → {{ seg.end_time }}，增长 {{ seg.growth_mb }} MB</li>
+                        {% set type_color = '#c0392b' if seg.leak_type == 'Java Heap' else ('#8e44ad' if seg.leak_type == 'Native Heap' else ('#16a085' if seg.leak_type == 'Graphics' else '#856404')) %}
+                        <tr style="background-color:{% if loop.index is odd %}#fffdf0{% else %}#fff8e1{% endif %};">
+                            <td style="padding:5px 8px;border:1px solid #ffc107;color:#555;">{{ seg.start_time }}<br>→ {{ seg.end_time }}</td>
+                            <td style="padding:5px 8px;border:1px solid #ffc107;text-align:center;color:#856404;font-weight:bold;">+{{ seg.growth_mb }} MB</td>
+                            <td style="padding:5px 8px;border:1px solid #ffc107;text-align:center;color:#e67e22;">{{ seg.leak_rate_mb_per_min | default(0) }} MB/min</td>
+                            <td style="padding:5px 8px;border:1px solid #ffc107;text-align:center;color:#666;">{{ seg.r2 | default('-') }}</td>
+                            <td style="padding:5px 8px;border:1px solid #ffc107;text-align:center;">
+                                <span style="background-color:{{ type_color }};color:#fff;padding:2px 8px;border-radius:3px;font-weight:bold;">{{ seg.leak_type | default('综合') }}</span>
+                            </td>
+                            <td style="padding:5px 8px;border:1px solid #ffc107;font-size:12px;color:#555;">
+                                Java: +{{ seg.java_heap_growth | default(0) }} MB<br>
+                                Native: +{{ seg.native_heap_growth | default(0) }} MB<br>
+                                Graphics: +{{ seg.graphics_growth | default(0) }} MB
+                            </td>
+                        </tr>
                         {% endfor %}
-                    </ul>
+                    </table>
                     {% endif %}
                 </div>
                 {% endif %}

@@ -16,7 +16,7 @@ class Config:
     支持从环境变量、配置文件和默认值读取配置
     """
     # 默认配置
-    DEFAULT_DEVICE_ID = "192.168.20.152:5555"  # 默认手机设备 ID
+    DEFAULT_DEVICE_ID = "192.168.20.81:5555"  # 默认手机设备 ID
     DEFAULT_PACKAGE_NAME = "com.aeke.fitnessmirror"  # 设备端测试应用包名
     DEFAULT_EVENT_COUNT = 300  # 默认事件数量
     
@@ -42,6 +42,8 @@ class Config:
     # 内存泄漏检测：连续 N 个采样点内存持续增长则告警
     PERF_MEM_LEAK_WINDOW = int(os.environ.get('PERF_MEM_LEAK_WINDOW', 10))    # 滑动窗口大小
     PERF_MEM_LEAK_GROWTH = float(os.environ.get('PERF_MEM_LEAK_GROWTH', 20.0))  # 窗口内增长阈值（MB）
+    PERF_MEM_LEAK_RATE   = float(os.environ.get('PERF_MEM_LEAK_RATE', 5.0))    # 泄漏速率阈值（MB/min），线性回归斜率
+    PERF_MEM_LEAK_R2_MIN = float(os.environ.get('PERF_MEM_LEAK_R2_MIN', 0.6))  # 线性相关性最低要求（R²）
 
     # 随机种子
     SEED = int(datetime.datetime.now().strftime("%Y%m%d%H%M"))  # 随机种子按"年月日时分"格式生成
