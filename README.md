@@ -21,21 +21,12 @@ Monkey是一个开源的自动化测试工具，它可以模拟用户的操作�
 ## 项目目标
 - 实现Monkey自动化测试脚本，并通过测试用例验证稳定性，发现bug并修复
 - 优化脚本，提升测试效率
-<<<<<<< HEAD
 - 提供详细的测试报告和崩溃分析
 - 支持多设备配置；当前为单设备顺序执行（多设备并行可后续扩展）
 - 集成性能监控功能，实时监测应用的CPU、内存和FPS
 
 ## 代码目录结构
 ```
-=======
-
-## 代码目录结构
-```
-├── README.md
-├── Monkey_test/
-│
->>>>>>> bc185e8 (Monkey稳定性测试)
 ├── config/
 │   ├── config.py              # 配置文件（设备信息、测试参数）
 │   └── logging_config.py      # 日志配置
@@ -61,6 +52,7 @@ Monkey是一个开源的自动化测试工具，它可以模拟用户的操作�
 │   └── monitor.py             # 性能监控主模块
 │
 <<<<<<< HEAD
+<<<<<<< HEAD
 ├── outputs/                   # 测试输出（日志和报告）
 │   ├── logs/                  # 保存 logcat 和测试日志
 │   ├── reports/               # 保存 HTML 或其他格式的测试报告
@@ -69,6 +61,11 @@ Monkey是一个开源的自动化测试工具，它可以模拟用户的操作�
 │   └── monkey_logs/           # 保存 monkey 测试日志
 │
 ├── test_performance_output/   # 性能测试输出
+=======
+├── docs/                      # 项目文档
+│   ├── issues_solutions.md    # 项目问题和解决方案文档
+│   └── iteration_process.md   # 项目迭代过程文档
+>>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
 │
 ├── main.py                    # 主入口文件
 <<<<<<< HEAD
@@ -219,15 +216,22 @@ python main.py --device 192.168.20.152:5555 --package com.example.app --events 1
 ## 许可证
 本项目采用MIT许可证。
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 ## 项目周期
 - 2025年1月10日-2025年2月30日
 >>>>>>> bc185e8 (Monkey稳定性测试)
 =======
+=======
+>>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
 
 ## 文档说明
 - **README.md**：项目说明文档
 - **docs/iteration_process.md**：项目迭代过程文档
+<<<<<<< HEAD
 - **docs/issues_solutions.md**：项目问题和解决方案文档
 >>>>>>> a8c8655 (feat: 添加性能监控模块并优化日志处理)
+=======
+- **docs/issues_solutions.md**：项目问题和解决方案文档
+>>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c

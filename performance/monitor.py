@@ -42,7 +42,11 @@ class PerformanceMonitor:
         self.is_running = False
         self.thread = None
         self.data = []
+<<<<<<< HEAD
         self.leak_analysis = {'suspected': False, 'total_growth_mb': 0, 'leak_segments': 0, 'leak_rate_mb_per_min': 0.0, 'details': []}
+=======
+        self.leak_analysis = {'suspected': False, 'total_growth_mb': 0, 'leak_segments': 0, 'details': []}
+>>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
 
         # 性能阈值
         self.cpu_threshold = Config.PERF_CPU_THRESHOLD
@@ -107,6 +111,7 @@ class PerformanceMonitor:
                 
                 # 采集各项指标
                 cpu = self.cpu_monitor.get_cpu_usage()
+<<<<<<< HEAD
                 mem_data = self.memory_monitor.get_memory_usage()
                 fps = self.fps_monitor.get_fps()
 
@@ -120,10 +125,16 @@ class PerformanceMonitor:
                     mem_total = float(mem_data or 0)
                     java_heap = native_heap = graphics = 0.0
 
+=======
+                mem = self.memory_monitor.get_memory_usage()
+                fps = self.fps_monitor.get_fps()
+                
+>>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
                 # 保存数据
                 self.data.append({
                     'timestamp': timestamp,
                     'cpu': cpu,
+<<<<<<< HEAD
                     'mem': mem_total,
                     'java_heap': java_heap,
                     'native_heap': native_heap,
@@ -131,6 +142,12 @@ class PerformanceMonitor:
                     'fps': fps,
                     'cpu_exceed': cpu > self.cpu_threshold,
                     'mem_exceed': mem_total > self.mem_threshold,
+=======
+                    'mem': mem,
+                    'fps': fps,
+                    'cpu_exceed': cpu > self.cpu_threshold,
+                    'mem_exceed': mem > self.mem_threshold,
+>>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
                     'fps_low': fps > 0 and fps < self.fps_threshold,
                 })
                 
@@ -141,6 +158,7 @@ class PerformanceMonitor:
     
     def _analyze_memory_leak(self):
         """
+<<<<<<< HEAD
         基于滑动窗口 + 线性回归检测内存泄漏：
         - 对每个窗口做最小二乘拟合，斜率 > PERF_MEM_LEAK_RATE (MB/min) 且 R² > PERF_MEM_LEAK_R2_MIN 才认定为泄漏段
         - 对每段泄漏分析各分项（Java Heap / Native Heap / Graphics）增长贡献，定位泄漏类型
@@ -213,11 +231,31 @@ class PerformanceMonitor:
                 else:
                     leak_type = '综合'
 
+=======
+        基于滑动窗口检测内存泄漏：
+        - 在 mem_leak_window 大小的窗口内，若内存净增长超过 mem_leak_growth MB，则记为一段泄漏
+        - 统计泄漏段数量和总增长量
+        """
+        result = {'suspected': False, 'total_growth_mb': 0.0, 'leak_segments': 0, 'details': []}
+        if len(self.data) < self.mem_leak_window:
+            return result
+
+        mem_vals = [d['mem'] for d in self.data]
+        w = self.mem_leak_window
+        segments = 0
+        i = 0
+        while i + w <= len(mem_vals):
+            window = mem_vals[i:i + w]
+            growth = window[-1] - window[0]
+            if growth >= self.mem_leak_growth:
+                segments += 1
+>>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
                 result['details'].append({
                     'start_idx': i,
                     'end_idx': i + w - 1,
                     'start_time': self.data[i]['timestamp'],
                     'end_time': self.data[i + w - 1]['timestamp'],
+<<<<<<< HEAD
                     'growth_mb': growth_mb,
                     'leak_rate_mb_per_min': round(slope_per_min, 2),
                     'r2': round(r2, 3),
@@ -238,6 +276,19 @@ class PerformanceMonitor:
             result['leak_segments'] = segments
             result['total_growth_mb'] = round(total_growth, 2)
             result['leak_rate_mb_per_min'] = round(avg_rate, 2)
+=======
+                    'growth_mb': round(growth, 2),
+                })
+                i += w  # 跳过已计入的窗口，避免重叠计数
+            else:
+                i += 1
+
+        if segments > 0:
+            total_growth = mem_vals[-1] - mem_vals[0]
+            result['suspected'] = True
+            result['leak_segments'] = segments
+            result['total_growth_mb'] = round(total_growth, 2)
+>>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
         return result
 
     def _save_data(self):

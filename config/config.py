@@ -19,6 +19,7 @@ class Config:
     DEFAULT_DEVICE_ID = "192.168.20.81:5555"  # 默认手机设备 ID
     DEFAULT_PACKAGE_NAME = "com.aeke.fitnessmirror"  # 设备端测试应用包名
     DEFAULT_EVENT_COUNT = 300  # 默认事件数量
+    DEFAULT_EVENT_COUNT = 300  # 默认事件数量
     
     # 从环境变量读取配置
     DEVICE_ID = os.environ.get('MONKEY_DEVICE_ID', DEFAULT_DEVICE_ID)
@@ -52,17 +53,23 @@ class Config:
     def __init__(self):
         """
         初始化配置。应用版本信息懒加载，避免无设备时阻塞启动。
+        初始化配置。应用版本信息懒加载，避免无设备时阻塞启动。
         """
+        self.device_version_name = None  # 首次访问 DeviceVersionName 时再拉取
+
         self.device_version_name = None  # 首次访问 DeviceVersionName 时再拉取
 
     def _get_app_info(self):
         """
         获取应用信息（懒加载，仅在有设备时调用）
+        获取应用信息（懒加载，仅在有设备时调用）
         """
         try:
             import uiautomator2 as u2
             d = u2.connect(self.DEVICE_ID)
+            d = u2.connect(self.DEVICE_ID)
             device_info = d.app_info(self.PACKAGE_NAME)
+            self.device_version_name = device_info.get('versionName') or "Unknown"
             self.device_version_name = device_info.get('versionName') or "Unknown"
             logger.info(f"DeviceVersionName: {self.device_version_name}")
         except Exception as e:
@@ -86,9 +93,28 @@ class Config:
             logger.error(f"获取固件版本失败: {e}")
             return "Unknown"
 
+
+    def _get_firmware_version(self):
+        """
+        通过 adb 获取主板固件版本（ro.build.display.id）
+        """
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["adb", "-s", self.DEVICE_ID, "shell", "getprop", "ro.build.display.id"],
+                shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, timeout=10
+            )
+            fw = result.stdout.strip()
+            return fw if fw else "Unknown"
+        except Exception as e:
+            logger.error(f"获取固件版本失败: {e}")
+            return "Unknown"
+
     @property
     def DeviceVersionName(self):
         """
+        获取设备版本名称（懒加载）
         获取设备版本名称（懒加载）
         """
         if self.device_version_name is None:
