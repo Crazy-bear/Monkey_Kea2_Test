@@ -52,7 +52,6 @@ fi
 
 echo "应用版本: $APP_VERSION"
 
-<<<<<<< HEAD
 echo "===== 获取主板固件 ====="
 
 FIRMWARE_VERSION=""
@@ -67,8 +66,6 @@ fi
 
 echo "主板固件: $FIRMWARE_VERSION"
 
-=======
->>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
 echo "===== 获取测试时长 ====="
 
 DURATION=""
@@ -133,13 +130,10 @@ JSON=$(cat <<EOF
           },
           {
             "is_short": true,
-<<<<<<< HEAD
             "text": { "tag": "lark_md", "content": "**主板固件**\n${FIRMWARE_VERSION}" }
           },
           {
             "is_short": true,
-=======
->>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
             "text": { "tag": "lark_md", "content": "**设备ID**\n${DEVICE_ID}" }
           },
           {

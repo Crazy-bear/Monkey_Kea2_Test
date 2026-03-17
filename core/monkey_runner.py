@@ -17,6 +17,8 @@ import uiautomator2 as u2
 import xml.etree.ElementTree as ET
 import os
 import time
+import os
+import time
 from config.logging_config import logger
 <<<<<<< HEAD
 =======
@@ -38,20 +40,35 @@ class MonkeyRunner:
         self.logcat_handler = LogcatHandler(config)
 
     def run_monkey(self, monkey_log_file, max_bytes=10 * 1024 * 1024, parse_ui_interval=None):
+    def run_monkey(self, monkey_log_file, max_bytes=10 * 1024 * 1024, parse_ui_interval=None):
         """
+        运行 Monkey 测试并实时解析日志，支持日志轮转。
+
         运行 Monkey 测试并实时解析日志，支持日志轮转。
 
         Args:
             monkey_log_file: 日志文件路径
             max_bytes: 日志文件最大大小，默认10MB
             parse_ui_interval: 每 N 个事件解析一次 UI（0 表示不解析），默认使用 PARSE_UI_INTERVAL
+            max_bytes: 日志文件最大大小，默认10MB
+            parse_ui_interval: 每 N 个事件解析一次 UI（0 表示不解析），默认使用 PARSE_UI_INTERVAL
         """
+        if parse_ui_interval is None:
+            parse_ui_interval = getattr(self.config, 'PARSE_UI_INTERVAL', PARSE_UI_INTERVAL)
+        rotator = None
         if parse_ui_interval is None:
             parse_ui_interval = getattr(self.config, 'PARSE_UI_INTERVAL', PARSE_UI_INTERVAL)
         rotator = None
         try:
             cmd = [
                 "adb", "-s", self.config.DEVICE_ID, "shell", "monkey",
+                "-p", self.config.PACKAGE_NAME,
+                "-s", str(self.config.SEED),
+                "--throttle", "500",
+                "--pct-touch", "40", "--pct-motion", "60", "--pct-syskeys", "0",
+                "--ignore-crashes", "--ignore-timeouts", "--monitor-native-crashes",
+                "-v", "-v", "-v",
+                str(self.config.EVENT_COUNT),
                 "-p", self.config.PACKAGE_NAME,
                 "-s", str(self.config.SEED),
                 "--throttle", "500",
@@ -70,7 +87,24 @@ class MonkeyRunner:
                     line = proc.stdout.readline()
                     if not line:
                         break
+            rotator = LogRotator(monkey_log_file, max_bytes)
+
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=False)
+            event_count = 0
+            try:
+                while True:
+                    line = proc.stdout.readline()
+                    if not line:
+                        break
                     line = line.strip()
+                    rotator.write(line + "\n")
+                    do_parse = parse_ui_interval > 0 and (event_count % parse_ui_interval == 0)
+                    if do_parse:
+                        self.parse_monkey_event(line, rotator)
+                    if "Sending" in line:
+                        event_count += 1
+
+                proc.wait(timeout=300)
                     rotator.write(line + "\n")
                     do_parse = parse_ui_interval > 0 and (event_count % parse_ui_interval == 0)
                     if do_parse:
@@ -81,6 +115,7 @@ class MonkeyRunner:
                 proc.wait(timeout=300)
                 if proc.returncode != 0:
                     logger.warning(f"Monkey 测试执行完成，退出码: {proc.returncode}")
+                    rotator.write(f"\nMonkey 测试执行完成，退出码: {proc.returncode}\n")
                     rotator.write(f"\nMonkey 测试执行完成，退出码: {proc.returncode}\n")
                 else:
                     logger.info("Monkey 测试执行成功")
@@ -95,8 +130,25 @@ class MonkeyRunner:
                     pass
             finally:
                 rotator.close()
+                    rotator.write("\nMonkey 测试执行成功\n")
+            except subprocess.TimeoutExpired:
+                logger.error("Monkey 测试执行超时")
+                rotator.write("\nMonkey 测试执行超时\n")
+                proc.terminate()
+                try:
+                    proc.wait(timeout=10)
+                except Exception:
+                    pass
+            finally:
+                rotator.close()
         except Exception as e:
             logger.error(f"执行 Monkey 测试时发生错误: {e}")
+            if rotator is not None:
+                try:
+                    rotator.write(f"\n执行 Monkey 测试时发生错误: {e}\n")
+                    rotator.close()
+                except Exception:
+                    pass
             if rotator is not None:
                 try:
                     rotator.write(f"\n执行 Monkey 测试时发生错误: {e}\n")
@@ -122,6 +174,7 @@ class MonkeyRunner:
 
     def find_element_by_coord(self, x, y):
         """
+        深度优先遍历 UI 树，查找包含指定坐标的元素
         深度优先遍历 UI 树，查找包含指定坐标的元素
         优先返回可点击元素，尽量返回最深层节点
         """

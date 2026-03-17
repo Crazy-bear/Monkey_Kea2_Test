@@ -42,11 +42,7 @@ class PerformanceMonitor:
         self.is_running = False
         self.thread = None
         self.data = []
-<<<<<<< HEAD
-        self.leak_analysis = {'suspected': False, 'total_growth_mb': 0, 'leak_segments': 0, 'leak_rate_mb_per_min': 0.0, 'details': []}
-=======
         self.leak_analysis = {'suspected': False, 'total_growth_mb': 0, 'leak_segments': 0, 'details': []}
->>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
 
         # 性能阈值
         self.cpu_threshold = Config.PERF_CPU_THRESHOLD
@@ -111,43 +107,17 @@ class PerformanceMonitor:
                 
                 # 采集各项指标
                 cpu = self.cpu_monitor.get_cpu_usage()
-<<<<<<< HEAD
-                mem_data = self.memory_monitor.get_memory_usage()
-                fps = self.fps_monitor.get_fps()
-
-                # mem_data 为 dict，兼容旧版 float
-                if isinstance(mem_data, dict):
-                    mem_total = mem_data.get('total', 0.0)
-                    java_heap = mem_data.get('java_heap', 0.0)
-                    native_heap = mem_data.get('native_heap', 0.0)
-                    graphics = mem_data.get('graphics', 0.0)
-                else:
-                    mem_total = float(mem_data or 0)
-                    java_heap = native_heap = graphics = 0.0
-
-=======
                 mem = self.memory_monitor.get_memory_usage()
                 fps = self.fps_monitor.get_fps()
                 
->>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
                 # 保存数据
                 self.data.append({
                     'timestamp': timestamp,
                     'cpu': cpu,
-<<<<<<< HEAD
-                    'mem': mem_total,
-                    'java_heap': java_heap,
-                    'native_heap': native_heap,
-                    'graphics': graphics,
-                    'fps': fps,
-                    'cpu_exceed': cpu > self.cpu_threshold,
-                    'mem_exceed': mem_total > self.mem_threshold,
-=======
                     'mem': mem,
                     'fps': fps,
                     'cpu_exceed': cpu > self.cpu_threshold,
                     'mem_exceed': mem > self.mem_threshold,
->>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
                     'fps_low': fps > 0 and fps < self.fps_threshold,
                 })
                 
@@ -158,80 +128,6 @@ class PerformanceMonitor:
     
     def _analyze_memory_leak(self):
         """
-<<<<<<< HEAD
-        基于滑动窗口 + 线性回归检测内存泄漏：
-        - 对每个窗口做最小二乘拟合，斜率 > PERF_MEM_LEAK_RATE (MB/min) 且 R² > PERF_MEM_LEAK_R2_MIN 才认定为泄漏段
-        - 对每段泄漏分析各分项（Java Heap / Native Heap / Graphics）增长贡献，定位泄漏类型
-        """
-        result = {
-            'suspected': False,
-            'total_growth_mb': 0.0,
-            'leak_segments': 0,
-            'leak_rate_mb_per_min': 0.0,
-            'details': [],
-        }
-        if len(self.data) < self.mem_leak_window:
-            return result
-
-        leak_rate_threshold = Config.PERF_MEM_LEAK_RATE
-        r2_min = Config.PERF_MEM_LEAK_R2_MIN
-
-        mem_vals = [d['mem'] for d in self.data]
-        w = self.mem_leak_window
-        i = 0
-        while i + w <= len(mem_vals):
-            window_mem = mem_vals[i:i + w]
-            xs = list(range(w))
-
-            # 线性回归（最小二乘）
-            n = w
-            sum_x = sum(xs)
-            sum_y = sum(window_mem)
-            sum_xy = sum(x * y for x, y in zip(xs, window_mem))
-            sum_x2 = sum(x * x for x in xs)
-            denom = n * sum_x2 - sum_x ** 2
-            if denom == 0:
-                i += 1
-                continue
-            slope = (n * sum_xy - sum_x * sum_y) / denom  # MB/采样点
-            intercept = (sum_y - slope * sum_x) / n
-
-            # R² 计算
-            y_mean = sum_y / n
-            ss_tot = sum((y - y_mean) ** 2 for y in window_mem)
-            ss_res = sum((y - (slope * x + intercept)) ** 2 for x, y in zip(xs, window_mem))
-            r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
-
-            # 斜率转换为 MB/min（采样间隔为 self.interval 秒）
-            slope_per_min = slope * (60.0 / self.interval)
-
-            if slope_per_min >= leak_rate_threshold and r2 >= r2_min:
-                # ── 分项增长分析，定位泄漏类型 ──────────────────────────────
-                def seg_growth(key):
-                    vals = [self.data[i + j].get(key, 0.0) or 0.0 for j in range(w)]
-                    return round(vals[-1] - vals[0], 2)
-
-                java_g = seg_growth('java_heap')
-                native_g = seg_growth('native_heap')
-                graphics_g = seg_growth('graphics')
-                growth_mb = round(window_mem[-1] - window_mem[0], 2)
-
-                # 主要贡献分项（增长最大且为正）
-                candidates = {
-                    'Java Heap': java_g,
-                    'Native Heap': native_g,
-                    'Graphics': graphics_g,
-                }
-                positive = {k: v for k, v in candidates.items() if v > 0}
-                if positive:
-                    leak_type = max(positive, key=positive.get)
-                    # 若最大分项贡献 < 总增长 30%，归为综合
-                    if positive[leak_type] < growth_mb * 0.3:
-                        leak_type = '综合'
-                else:
-                    leak_type = '综合'
-
-=======
         基于滑动窗口检测内存泄漏：
         - 在 mem_leak_window 大小的窗口内，若内存净增长超过 mem_leak_growth MB，则记为一段泄漏
         - 统计泄漏段数量和总增长量
@@ -249,34 +145,11 @@ class PerformanceMonitor:
             growth = window[-1] - window[0]
             if growth >= self.mem_leak_growth:
                 segments += 1
->>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
                 result['details'].append({
                     'start_idx': i,
                     'end_idx': i + w - 1,
                     'start_time': self.data[i]['timestamp'],
                     'end_time': self.data[i + w - 1]['timestamp'],
-<<<<<<< HEAD
-                    'growth_mb': growth_mb,
-                    'leak_rate_mb_per_min': round(slope_per_min, 2),
-                    'r2': round(r2, 3),
-                    'leak_type': leak_type,
-                    'java_heap_growth': java_g,
-                    'native_heap_growth': native_g,
-                    'graphics_growth': graphics_g,
-                })
-                i += w  # 跳过已计入窗口
-            else:
-                i += 1
-
-        segments = len(result['details'])
-        if segments > 0:
-            total_growth = mem_vals[-1] - mem_vals[0]
-            avg_rate = sum(d['leak_rate_mb_per_min'] for d in result['details']) / segments
-            result['suspected'] = True
-            result['leak_segments'] = segments
-            result['total_growth_mb'] = round(total_growth, 2)
-            result['leak_rate_mb_per_min'] = round(avg_rate, 2)
-=======
                     'growth_mb': round(growth, 2),
                 })
                 i += w  # 跳过已计入的窗口，避免重叠计数
@@ -288,7 +161,6 @@ class PerformanceMonitor:
             result['suspected'] = True
             result['leak_segments'] = segments
             result['total_growth_mb'] = round(total_growth, 2)
->>>>>>> 976242683a0d1be6410f7f88d4d8d6e2b925f14c
         return result
 
     def _save_data(self):
