@@ -5,7 +5,6 @@
 """
 
 import subprocess
-<<<<<<< HEAD
 import threading
 import time
 import os
@@ -92,29 +91,10 @@ class LogcatHandler:
                 logger.error(f"停止 Logcat 失败: {e}")
             finally:
                 self.process = None
-=======
-from config.config import Config
-
-
-class LogcatHandler:
-    def start_logcat(self, output_file):
-        """
-        启动 Logcat 日志捕获。
-        """
-        process = subprocess.Popen(["adb", "-s", Config.DEVICE_ID, "logcat"], stdout=open(output_file, "w"))
-        return process
-
-    def stop_logcat(self, process):
-        """
-        停止 Logcat 捕获。
-        """
-        process.terminate()
->>>>>>> bc185e8 (Monkey稳定性测试)
 
     def detect_crashes(self, log_file):
         """
         检测日志中的崩溃信息。
-<<<<<<< HEAD
         
         Args:
             log_file: 日志文件路径
@@ -313,22 +293,3 @@ class LogcatHandler:
         monitor_thread.daemon = True
         monitor_thread.start()
         logger.info("实时崩溃检测已启动")
-
-=======
-        """
-        try:
-            with open(log_file, "r", encoding="utf-8", errors="ignore") as file:
-                crashes = []
-                keywords = ["FATAL EXCEPTION", "ANR", "NullPointerException"]
-                for line in file:
-                    if any(keyword in line for keyword in keywords):
-                        crashes.append(line)
-        except FileNotFoundError:
-            print(f"错误: 日志文件 {log_file} 未找到。")
-            return []
-        except IOError as e:
-            print(f"IO 错误: {e}")
-            return []
-        return crashes
->>>>>>> bc185e8 (Monkey稳定性测试)
-

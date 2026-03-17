@@ -8,7 +8,6 @@ import os
 import time
 import datetime
 
-<<<<<<< HEAD
 # 避免循环导入，在函数内部导入
 logger = None
 
@@ -22,13 +21,10 @@ def _get_logger():
         from config.logging_config import logger
     return logger
 
-=======
->>>>>>> bc185e8 (Monkey稳定性测试)
 
 def create_output_dirs(base_dir):
     """
     创建输出目录。
-<<<<<<< HEAD
     
     Args:
         base_dir: 目录路径
@@ -42,16 +38,11 @@ def create_output_dirs(base_dir):
     except Exception as e:
         _get_logger().error(f"创建目录失败: {e}")
         return False
-=======
-    """
-    os.makedirs(base_dir, exist_ok=True)
->>>>>>> bc185e8 (Monkey稳定性测试)
 
 
 def get_timestamp():
     """
     获取当前时间戳。
-<<<<<<< HEAD
     
     Returns:
         str: 时间戳字符串

@@ -189,8 +189,10 @@ class PerformanceMonitor:
 
             if slope_per_min >= leak_rate_threshold and r2 >= r2_min:
                 # ── 分项增长分析，定位泄漏类型 ──────────────────────────────
-                def seg_growth(key):
-                    vals = [self.data[i + j].get(key, 0.0) or 0.0 for j in range(w)]
+                seg_start = i  # 固定当前窗口起始索引，避免闭包捕获变量 i
+
+                def seg_growth(key, _start=seg_start, _w=w):
+                    vals = [self.data[_start + j].get(key, 0.0) or 0.0 for j in range(_w)]
                     return round(vals[-1] - vals[0], 2)
 
                 java_g = seg_growth('java_heap')
@@ -256,8 +258,9 @@ class PerformanceMonitor:
         # 保存为CSV
         try:
             with open(csv_file, 'w', newline='', encoding='utf-8') as f:
-                fieldnames = ['timestamp', 'cpu', 'mem', 'fps']
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                fieldnames = ['timestamp', 'cpu', 'mem', 'java_heap', 'native_heap', 'graphics', 'fps',
+                              'cpu_exceed', 'mem_exceed', 'fps_low']
+                writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
                 writer.writeheader()
                 writer.writerows(self.data)
             logger.info(f"性能数据已保存到CSV: {csv_file}")

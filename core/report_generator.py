@@ -4,7 +4,6 @@
 @date: 2025/1/10
 """
 
-<<<<<<< HEAD
 import os
 import base64
 import io
@@ -104,6 +103,13 @@ class ReportGenerator:
             import matplotlib
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
+            # 解决中文字体缺失警告：优先使用系统中文字体，找不到则回退英文标签
+            import matplotlib.font_manager as fm
+            _zh_fonts = [f.name for f in fm.fontManager.ttflist
+                         if any(k in f.name for k in ('SimHei', 'Microsoft YaHei', 'WenQuanYi', 'Noto Sans CJK', 'PingFang', 'Heiti'))]
+            if _zh_fonts:
+                matplotlib.rcParams['font.family'] = _zh_fonts[0]
+            matplotlib.rcParams['axes.unicode_minus'] = False
         except Exception as e:
             logger.warning(f"matplotlib 不可用，跳过性能图生成: {e}")
             return None
@@ -129,19 +135,19 @@ class ReportGenerator:
             # CPU 阈值线
             if thresholds.get('cpu'):
                 ax1.axhline(y=thresholds['cpu'], color="#ff6384", linestyle='--', linewidth=1,
-                            alpha=0.7, label=f"CPU阈值({thresholds['cpu']}%)")
+                            alpha=0.7, label=f"CPU limit({thresholds['cpu']}%)")
             # Mem 阈值线
             if thresholds.get('mem'):
                 ax1.axhline(y=thresholds['mem'], color="#36a2eb", linestyle='--', linewidth=1,
-                            alpha=0.7, label=f"Mem阈值({thresholds['mem']}MB)")
+                            alpha=0.7, label=f"Mem limit({thresholds['mem']}MB)")
 
             # 标注 CPU/Mem 超标点
             cpu_ex = [i for i, d in enumerate(performance_data) if d.get('cpu_exceed')]
             mem_ex = [i for i, d in enumerate(performance_data) if d.get('mem_exceed')]
             if cpu_ex:
-                ax1.scatter(cpu_ex, [cpu[i] for i in cpu_ex], color="#ff0000", s=30, zorder=5, label="CPU超标")
+                ax1.scatter(cpu_ex, [cpu[i] for i in cpu_ex], color="#ff0000", s=30, zorder=5, label="CPU over")
             if mem_ex:
-                ax1.scatter(mem_ex, [mem[i] for i in mem_ex], color="#0055ff", s=30, zorder=5, label="Mem超标")
+                ax1.scatter(mem_ex, [mem[i] for i in mem_ex], color="#0055ff", s=30, zorder=5, label="Mem over")
 
             ax2 = ax1.twinx()
             ax2.plot(xs, fps, color="#4bc0c0", linewidth=1.5, label="FPS")
@@ -150,17 +156,17 @@ class ReportGenerator:
             # FPS 阈值线
             if thresholds.get('fps'):
                 ax2.axhline(y=thresholds['fps'], color="#4bc0c0", linestyle='--', linewidth=1,
-                            alpha=0.7, label=f"FPS阈值({thresholds['fps']})")
+                            alpha=0.7, label=f"FPS limit({thresholds['fps']})")
             # 标注 FPS 低帧点
             fps_low = [i for i, d in enumerate(performance_data) if d.get('fps_low')]
             if fps_low:
-                ax2.scatter(fps_low, [fps[i] for i in fps_low], color="#ff8800", s=30, zorder=5, label="FPS过低")
+                ax2.scatter(fps_low, [fps[i] for i in fps_low], color="#ff8800", s=30, zorder=5, label="FPS low")
 
             # 内存泄漏区间高亮
             if leak_analysis and leak_analysis.get('suspected'):
                 for seg in leak_analysis.get('details', []):
                     ax1.axvspan(seg['start_idx'], seg['end_idx'],
-                                alpha=0.12, color='orange', label='疑似泄漏区间')
+                                alpha=0.12, color='orange', label='Leak zone')
 
             # x 轴标签过密时抽样显示
             if labels:

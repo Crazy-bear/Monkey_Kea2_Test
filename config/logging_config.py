@@ -2,7 +2,6 @@
 """
 @author: Junxiong Huang
 @date: 2025/1/10
-<<<<<<< HEAD
 
 日志配置文件
 """
@@ -44,19 +43,3 @@ def setup_logger():
 
 # 导出日志记录器
 logger = setup_logger()
-=======
-"""
-
-import logging
-
-
-def setup_logging():
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler("outputs/logs/test.log"),
-            logging.StreamHandler()
-        ]
-    )
->>>>>>> bc185e8 (Monkey稳定性测试)
