@@ -1,17 +1,1 @@
 /outputs/
-/__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.pytest_cache/
-.venv/
-env/
-*.swp
-*.swo
-*~
-.DS_Store
-.idea/
-.vscode/
-*.log
-*.tmp
-*.temp
