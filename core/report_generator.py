@@ -8,7 +8,7 @@ import os
 import base64
 import io
 from jinja2 import Template, FileSystemLoader, Environment
-from config.logging_config import logger
+from settings.logging_config import logger
 
 
 class ReportGenerator:
@@ -24,6 +24,66 @@ class ReportGenerator:
         """
         self.template_dir = template_dir or os.path.join(os.path.dirname(__file__), "..", "templates")
         self.env = Environment(loader=FileSystemLoader(self.template_dir))
+        self.baseline = None
+
+    def load_baseline(self, filepath):
+        """
+        从 JSON 文件加载性能基线数据。
+
+        基线格式示例::
+            {"cpu": {"avg": 30, "p95": 50}, "mem": {"avg": 200, "p95": 350}, "fps": {"avg": 55, "p95": 60}}
+        """
+        import json
+        with open(filepath, "r", encoding="utf-8") as f:
+            self.baseline = json.load(f)
+        logger.info(f"已加载性能基线: {filepath}")
+        return self.baseline
+
+    def _apply_baseline_comparison(self, data):
+        """对比当前性能摘要与基线，标注回归项。"""
+        baseline = data.get("performance_baseline") or self.baseline
+        perf = data.get("performance_data")
+        if not baseline or not perf:
+            data["baseline_comparison"] = None
+            return data
+
+        def avg(key):
+            vals = [float(d.get(key) or 0) for d in perf if float(d.get(key) or 0) > 0]
+            return round(sum(vals) / len(vals), 2) if vals else 0.0
+
+        def p95(key):
+            vals = sorted(v for d in perf if (v := float(d.get(key) or 0)) > 0)
+            if not vals:
+                return 0.0
+            idx = max(0, int(len(vals) * 0.95) - 1)
+            return round(vals[idx], 2)
+
+        current = {
+            "cpu": {"avg": avg("cpu"), "p95": p95("cpu")},
+            "mem": {"avg": avg("mem"), "p95": p95("mem")},
+            "fps": {"avg": avg("fps"), "p95": p95("fps")},
+        }
+
+        regressions = []
+        for metric in ("cpu", "mem"):
+            base_avg = float((baseline.get(metric) or {}).get("avg", 0) or 0)
+            base_p95 = float((baseline.get(metric) or {}).get("p95", 0) or 0)
+            if base_avg and current[metric]["avg"] > base_avg * 1.1:
+                regressions.append(f"{metric.upper()} 均值 {current[metric]['avg']} 超过基线 {base_avg}")
+            if base_p95 and current[metric]["p95"] > base_p95 * 1.1:
+                regressions.append(f"{metric.upper()} P95 {current[metric]['p95']} 超过基线 {base_p95}")
+
+        base_fps = float((baseline.get("fps") or {}).get("avg", 0) or 0)
+        if base_fps and current["fps"]["avg"] > 0 and current["fps"]["avg"] < base_fps * 0.9:
+            regressions.append(f"FPS 均值 {current['fps']['avg']} 低于基线 {base_fps}")
+
+        data["baseline_comparison"] = {
+            "baseline": baseline,
+            "current": current,
+            "regressions": regressions,
+            "has_regression": len(regressions) > 0,
+        }
+        return data
     
     def generate_html_report(self, data, output_file):
         """
@@ -336,17 +396,17 @@ class ReportGenerator:
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Monkey Test Report</title>
+            <title>稳定性测试报告</title>
         </head>
         <body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:1200px;margin:0 auto;padding:20px;background-color:#f4f4f4;">
-            <h1 style="color:#2c3e50;text-align:center;border-bottom:2px solid #3498db;padding-bottom:10px;">Monkey 测试报告</h1>
+            <h1 style="color:#2c3e50;text-align:center;border-bottom:2px solid #3498db;padding-bottom:10px;">力量镜稳定性测试报告</h1>
 
             <!-- 顶部统计卡片 -->
             <table width="100%" cellpadding="0" cellspacing="8" style="margin:20px 0;">
                 <tr>
                     <td width="25%" style="text-align:center;background-color:#ffffff;padding:20px 10px;border:2px solid #3498db;">
-                        <div style="font-size:30px;font-weight:bold;color:#3498db;">{{ data.execution_count }}</div>
-                        <div style="font-size:13px;color:#666;margin-top:6px;">执行事件数</div>
+                        <div style="font-size:22px;font-weight:bold;color:#3498db;">{{ data.execution_label | default(data.execution_count) }}</div>
+                        <div style="font-size:13px;color:#666;margin-top:6px;">{{ '运行时长' if data.test_engine == 'kea2' else '执行事件数' }}</div>
                     </td>
                     <td width="25%" style="text-align:center;background-color:#ffffff;padding:20px 10px;border:2px solid #3498db;">
                         <div style="font-size:30px;font-weight:bold;color:#3498db;">{{ data.crash_count }}</div>
@@ -357,12 +417,16 @@ class ReportGenerator:
                         <div style="font-size:13px;color:#666;margin-top:6px;">测试时长</div>
                     </td>
                     <td width="25%" style="text-align:center;background-color:#ffffff;padding:20px 10px;border:2px solid #3498db;">
-                        {% if data.crash_count == 0 %}
+                        {% if data.gate_status and data.gate_status.passed %}
+                        <div style="font-size:22px;font-weight:bold;color:#155724;background-color:#d4edda;padding:6px;">通过</div>
+                        {% elif data.gate_status and not data.gate_status.passed %}
+                        <div style="font-size:22px;font-weight:bold;color:#721c24;background-color:#f8d7da;padding:6px;">失败</div>
+                        {% elif data.crash_count == 0 %}
                         <div style="font-size:22px;font-weight:bold;color:#155724;background-color:#d4edda;padding:6px;">成功</div>
                         {% else %}
                         <div style="font-size:22px;font-weight:bold;color:#721c24;background-color:#f8d7da;padding:6px;">失败</div>
                         {% endif %}
-                        <div style="font-size:13px;color:#666;margin-top:6px;">测试结果</div>
+                        <div style="font-size:13px;color:#666;margin-top:6px;">门禁结果</div>
                     </td>
                 </tr>
             </table>
@@ -382,13 +446,43 @@ class ReportGenerator:
             <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
                 <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">测试信息</h2>
                 <table style="width:100%;border-collapse:collapse;">
-                    <tr><td style="font-weight:bold;width:150px;padding:6px 0;">开始时间:</td><td style="padding:6px 0;">{{ data.start_time }}</td></tr>
+                    <tr><td style="font-weight:bold;width:150px;padding:6px 0;">测试引擎:</td><td style="padding:6px 0;">{{ data.test_engine | default('monkey') }}</td></tr>
+                    <tr><td style="font-weight:bold;padding:6px 0;">开始时间:</td><td style="padding:6px 0;">{{ data.start_time }}</td></tr>
                     <tr><td style="font-weight:bold;padding:6px 0;">结束时间:</td><td style="padding:6px 0;">{{ data.end_time }}</td></tr>
                     <tr><td style="font-weight:bold;padding:6px 0;">随机种子:</td><td style="padding:6px 0;">{{ data.seed_value }}</td></tr>
-                    <tr><td style="font-weight:bold;padding:6px 0;">事件数量:</td><td style="padding:6px 0;">{{ data.execution_count }}</td></tr>
+                    <tr><td style="font-weight:bold;padding:6px 0;">执行规模:</td><td style="padding:6px 0;">{{ data.execution_label | default(data.execution_count) }}</td></tr>
+                    {% if data.scenarios %}
+                    <tr><td style="font-weight:bold;padding:6px 0;">场景脚本:</td><td style="padding:6px 0;">{{ data.scenarios }}</td></tr>
+                    {% endif %}
                     <tr><td style="font-weight:bold;padding:6px 0;">崩溃次数:</td><td style="padding:6px 0;">{{ data.crash_count }}</td></tr>
+                    {% if data.gate_status and data.gate_status.reasons %}
+                    <tr><td style="font-weight:bold;padding:6px 0;">门禁原因:</td><td style="padding:6px 0;">{{ data.gate_status.reasons | join('；') }}</td></tr>
+                    {% endif %}
                 </table>
             </div>
+
+            {% if data.kea2 %}
+            <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
+                <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">Kea2 测试结果</h2>
+                <table style="width:100%;border-collapse:collapse;">
+                    <tr><td style="font-weight:bold;width:150px;padding:6px 0;">退出码:</td><td style="padding:6px 0;">{{ data.kea2.exit_code | default('N/A') }}</td></tr>
+                    <tr><td style="font-weight:bold;padding:6px 0;">运行时长(分钟):</td><td style="padding:6px 0;">{{ data.kea2.running_minutes | default('N/A') }}</td></tr>
+                    <tr><td style="font-weight:bold;padding:6px 0;">属性违反:</td><td style="padding:6px 0;">{{ data.kea2.property_violation_count | default(0) }} 次</td></tr>
+                    <tr><td style="font-weight:bold;padding:6px 0;">Kea2 报告:</td><td style="padding:6px 0;">{{ data.kea2.report_path | default('未生成') }}</td></tr>
+                    {% if data.kea2.error_message %}
+                    <tr><td style="font-weight:bold;padding:6px 0;">错误信息:</td><td style="padding:6px 0;color:#c0392b;">{{ data.kea2.error_message }}</td></tr>
+                    {% endif %}
+                </table>
+                {% if data.kea2.property_violations %}
+                <h3 style="color:#34495e;">属性违反详情</h3>
+                <ul>
+                {% for v in data.kea2.property_violations %}
+                    <li>{{ v.test | default('') }} — {{ v.message | default(v) }}</li>
+                {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% endif %}
 
             <!-- 日志分析 -->
             {% if data.log_analysis %}
@@ -870,6 +964,30 @@ class ReportGenerator:
             </div>
             {% endif %}
 
+            {% if data.phase_performance %}
+            <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
+                <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">分场景性能摘要</h2>
+                <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                    <tr style="background-color:#f8f9fa;">
+                        <th style="padding:8px;border:1px solid #dee2e6;">场景 phase</th>
+                        <th style="padding:8px;border:1px solid #dee2e6;">CPU avg</th>
+                        <th style="padding:8px;border:1px solid #dee2e6;">Mem avg (MB)</th>
+                        <th style="padding:8px;border:1px solid #dee2e6;">FPS avg</th>
+                        <th style="padding:8px;border:1px solid #dee2e6;">样本数</th>
+                    </tr>
+                    {% for phase, stats in data.phase_performance.items() %}
+                    <tr>
+                        <td style="padding:8px;border:1px solid #dee2e6;">{{ phase }}</td>
+                        <td style="padding:8px;border:1px solid #dee2e6;text-align:center;">{{ stats.cpu.avg }}</td>
+                        <td style="padding:8px;border:1px solid #dee2e6;text-align:center;">{{ stats.mem.avg }}</td>
+                        <td style="padding:8px;border:1px solid #dee2e6;text-align:center;">{{ stats.fps.avg }}</td>
+                        <td style="padding:8px;border:1px solid #dee2e6;text-align:center;">{{ stats.cpu.samples | default(0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            {% endif %}
+
         </body>
         </html>
         """
@@ -904,10 +1022,11 @@ class ReportGenerator:
     
     def generate_report(self, data, output_file, format="html"):
         """
-        生成测试报告。会先规范化 performance_data。
+        生成测试报告。会先规范化 performance_data，并可选对比性能基线。
         """
         data = dict(data)
         data["performance_data"] = self._normalize_performance_data(data.get("performance_data"))
+        data = self._apply_baseline_comparison(data)
         if format.lower() == "json":
             return self.generate_json_report(data, output_file)
         return self.generate_html_report(data, output_file)

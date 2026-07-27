@@ -3,76 +3,53 @@
 @author: Junxiong Huang
 @date: 2025/1/10
 
-基础页面类，提供通用方法
+基础页面类，提供通用方法，支持多种定位策略。
 """
-import uiautomator2 as u2
+
+
+def _resolve_selector(device, locator):
+    """
+    将定位器解析为 uiautomator2 选择器。
+
+    Args:
+        device: uiautomator2 设备实例
+        locator: resourceId 字符串，或 {"type": "...", "value": "..."} 字典
+
+    Returns:
+        uiautomator2 元素对象
+    """
+    if isinstance(locator, dict):
+        loc_type = locator.get("type", "resourceId")
+        value = locator.get("value", "")
+        if loc_type == "text":
+            return device(text=value)
+        if loc_type == "textContains":
+            return device(textContains=value)
+        if loc_type == "className":
+            return device(className=value)
+        if loc_type == "description":
+            return device(description=value)
+        return device(resourceId=value)
+    return device(resourceId=locator)
 
 
 class BasePage:
-    """
-    基础页面类
-    """
+    """基础页面类"""
+
     def __init__(self, device):
-        """
-        初始化基础页面
-        
-        Args:
-            device: uiautomator2设备实例
-        """
         self.device = device
-    
+
     def click(self, locator):
-        """
-        点击元素
-        
-        Args:
-            locator: 元素定位器
-        """
-        self.device(resourceId=locator).click()
-    
+        _resolve_selector(self.device, locator).click()
+
     def send_keys(self, locator, text):
-        """
-        输入文本
-        
-        Args:
-            locator: 元素定位器
-            text: 要输入的文本
-        """
-        self.device(resourceId=locator).set_text(text)
-    
+        _resolve_selector(self.device, locator).set_text(text)
+
     def get_text(self, locator):
-        """
-        获取元素文本
-        
-        Args:
-            locator: 元素定位器
-            
-        Returns:
-            元素文本
-        """
-        return self.device(resourceId=locator).get_text()
-    
+        return _resolve_selector(self.device, locator).get_text()
+
     def is_displayed(self, locator):
-        """
-        检查元素是否显示
-        
-        Args:
-            locator: 元素定位器
-            
-        Returns:
-            bool: 元素是否显示
-        """
-        return self.device(resourceId=locator).exists
-    
+        return _resolve_selector(self.device, locator).exists
+
     def wait_until_displayed(self, locator, timeout=10):
-        """
-        等待元素显示
-        
-        Args:
-            locator: 元素定位器
-            timeout: 超时时间（秒）
-            
-        Returns:
-            bool: 元素是否在超时前显示
-        """
-        return self.device(resourceId=locator).wait(timeout=timeout)
+        return _resolve_selector(self.device, locator).wait(timeout=timeout)

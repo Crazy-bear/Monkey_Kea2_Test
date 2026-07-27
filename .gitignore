@@ -1,17 +1,31 @@
+# 运行产物
 /outputs/
-/__pycache__/
-*.pyc
-*.pyo
-*.pyd
+/test_report_dir/
+*.log
+*.tmp
+*.temp
+
+# Kea2 init 生成的示例脚本（不需要入库）
+/quicktest.py
+
+# Python
+**/__pycache__/
+*.py[cod]
+*$py.class
 .pytest_cache/
 .venv/
+venv/
 env/
+
+# IDE / 编辑器
+.idea/
+.vscode/
 *.swp
 *.swo
 *~
 .DS_Store
-.idea/
-.vscode/
-*.log
-*.tmp
-*.temp
+
+# 第三方 AI/插件本地残留
+.qodo/
+.trae/
+.kiro/

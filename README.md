@@ -1,233 +1,258 @@
-# 项目名称：【A1力量镜】Monkey自动化测试
-## 项目介绍
-<<<<<<< HEAD
-Monkey是一个开源的自动化测试工具，它可以模拟用户的操作行为，并自动执行脚本。本项目基于Monkey工具，为【A1力量镜】应用量身定制了自动化测试方案，用于测试应用的稳定性和可靠性。
+# 【A1力量镜】稳定性自动化测试（Kea2 + Monkey）
 
-=======
-Monkey是一个开源的自动化测试工具，它可以模拟用户的操作行为，并自动执行脚本。Monkey可以用来测试Web应用、移动应用、桌面应用、游戏等。
->>>>>>> bc185e8 (Monkey稳定性测试)
+为【A1力量镜】（`com.aeke.fitnessmirror`）定制的 Android 稳定性测试方案。以 **Kea2（Fastbot 随机探索 + 属性测试）** 为主引擎，保留 **Monkey** 冒烟路径；测试期间并行采集 CPU / 内存 / FPS、Logcat 崩溃分析，并输出统一 HTML/JSON 报告，支持 Jenkins 门禁与飞书通知。
+
+> **Python 3.8+**（Kea2 要求） · **ADB** · 已开启 USB 调试的 Android 设备
+
+---
+
 ## 项目背景
-用于测试【A1力量镜】的稳定性，主要测试场景为：
-- 登录页面
-- 随心练
-- 精品课程（AI课程、跟练课程）
-- 个人中心
-- 运动计划
-- 运动测评
-- 音乐
-- K歌
-- 使用指南
 
-## 项目目标
-- 实现Monkey自动化测试脚本，并通过测试用例验证稳定性，发现bug并修复
-- 优化脚本，提升测试效率
-<<<<<<< HEAD
-- 提供详细的测试报告和崩溃分析
-- 支持多设备配置；当前为单设备顺序执行（多设备并行可后续扩展）
-- 集成性能监控功能，实时监测应用的CPU、内存和FPS
+力量镜为长时运行的健身镜应用，需在真实设备上验证：
 
-## 代码目录结构
-```
-=======
+- 长时间随机操作下的崩溃、ANR、内存泄漏
+- 核心业务路径（随心练、课程、个人中心等）在属性脚本下的可达性与不变量
+- 性能是否超出阈值（CPU、内存、FPS）
 
-## 代码目录结构
-```
-├── README.md
-├── Monkey_test/
-│
->>>>>>> bc185e8 (Monkey稳定性测试)
-├── config/
-│   ├── config.py              # 配置文件（设备信息、测试参数）
-│   └── logging_config.py      # 日志配置
-│
-├── core/
-│   ├── adb_client.py          # 封装 ADB 操作的核心类
-│   ├── monkey_runner.py       # Monkey 测试核心逻辑
-│   ├── logcat_handler.py      # Logcat 捕获和处理
-│   ├── report_generator.py    # 测试报告生成模块
-│   └── utils.py               # 通用工具函数
-│
-├── pages/                     # Page Object 层（针对目标应用的页面）
-│   ├── base_page.py           # 基础页面类，提供通用方法
-│   ├── login_page.py          # 登录页面
-│   ├── main_page.py           # 主界面
-│   ├── settings_page.py       # 设置页面
-│   └── example_page.py        # 示例功能页面
-│
-├── performance/               # 性能监控模块
-│   ├── cpu.py                 # CPU 监控
-│   ├── fps.py                 # FPS 监控
-│   ├── memory.py              # 内存监控
-│   └── monitor.py             # 性能监控主模块
-│
-<<<<<<< HEAD
-├── outputs/                   # 测试输出（日志和报告）
-│   ├── logs/                  # 保存 logcat 和测试日志
-│   ├── reports/               # 保存 HTML 或其他格式的测试报告
-<<<<<<< HEAD
-│   ├── coverage/              # 保存代码覆盖率文件
-│   └── monkey_logs/           # 保存 monkey 测试日志
-│
-├── test_performance_output/   # 性能测试输出
-│
-├── main.py                    # 主入口文件
-<<<<<<< HEAD
-=======
-│   └── coverage/              # 保存代码覆盖率文件
-│   └── monkey_logs/           # 保存 monkey 测试日志
->>>>>>> bc185e8 (Monkey稳定性测试)
-=======
-├── test_performance.py        # 性能测试脚本
->>>>>>> a8c8655 (feat: 添加性能监控模块并优化日志处理)
-=======
-├── docs/                      # 项目文档
-│   ├── issues_solutions.md    # 项目问题和解决方案文档
-│   └── iteration_process.md   # 项目迭代过程文档
-│
-├── main.py                    # 主入口文件
->>>>>>> c9e2aac (chore: 更新项目文档和结构调整)
-├── README.md                  # 项目说明文档
-└── requirements.txt           # Python 依赖包
+**测试前提**：设备已 **预登录并停留在主页**，场景脚本从主页出发，不覆盖登录流程。
+
+| 场景模块 | 脚本 | 别名 |
+|----------|------|------|
+| 主导航 | `test_main_navigation.py` | `main`, `navigation` |
+| 随心练 | `test_suixinlian.py` | `suixinlian` |
+| 精品课程 | `test_course.py` | `course` |
+| 个人中心 / 运动计划 | `test_profile_plan.py` | `profile`, `plan` |
+| 音乐 / 使用指南 | `test_media_guide.py` | `media`, `guide` |
+
+---
+
+## 架构概览
 
 ```
+main.py
+  ├─ engine=kea2（默认）
+  │    ├─ orchestrator/kea2_runner   → Kea2 CLI + Fastbot
+  │    ├─ scenarios/                 → 属性测试脚本（复用 pages/）
+  │    └─ configs/                   → Fastbot 黑白名单（Kea2 固定目录名）
+  ├─ engine=monkey                   → core/monkey_runner 冒烟
+  └─ 并行（两种引擎共用）
+       ├─ performance/monitor       → CPU / 内存 / FPS
+       ├─ core/logcat_handler        → 崩溃检测
+       └─ core/report_generator      → report.html / report.json + 门禁
+```
 
-## 项目技术栈
-- Monkey测试工具
-- Python编程语言
-- ADB命令行工具
-- Page Object模式
-- 日志处理、报告生成
-<<<<<<< HEAD
-- Jinja2模板引擎（用于报告生成）
-- uiautomator2（用于UI自动化）
-- 性能监控（CPU、内存、FPS）
+**两个「配置」目录，职责不同：**
 
-## 项目周期
-- 2025年1月10日-2026年3月12日
+| 目录 | 用途 | 典型修改 |
+|------|------|----------|
+| `settings/` | 框架运行参数（Python 代码） | 设备 ID、时长、性能阈值 |
+| `configs/` | Kea2/Fastbot 探索策略 | `widget.block.py`、`abl.strings` |
+
+详见 [`settings/README.md`](settings/README.md)、[`configs/README.md`](configs/README.md)。
+
+---
+
+## 目录结构
+
+```
+├── main.py                 # 主入口
+├── settings/               # 框架配置（config.py、logging）
+├── configs/                # Kea2/Fastbot 配置（自动 kea2 init）
+├── orchestrator/           # 测试编排（Kea2 运行、报告组装）
+├── scenarios/              # Kea2 属性脚本
+├── pages/                  # Page Object（main_page 等）
+├── core/                   # ADB、Logcat、报告、Monkey
+├── performance/            # 性能监控
+├── templates/              # 可选 HTML 报告模板
+├── tests/                  # 单元测试（pytest，无需设备）
+├── docs/                   # 迭代记录、问题解决方案
+├── outputs/                # 测试产出（gitignore）
+└── Jenkinsfile.example     # CI 门禁 + 飞书通知示例
+```
+
+---
+
+## 技术栈
+
+- **Kea2 / Fastbot** — 场景化随机探索与属性测试
+- **Android Monkey** — 轻量冒烟
+- **Python 3.8+** · **uiautomator2** · **ADB**
+- **Page Object** — 场景脚本与 UI 定位解耦
+- **Jinja2** — HTML 报告（可自定义 `templates/report_template.html`）
+- **pytest** — 单元测试与 CI 校验
+
+---
 
 ## 快速开始
+
 ### 1. 环境准备
-- Python 3.7+
-- ADB工具
-- 连接到电脑的Android设备
+
+- 安装 [ADB](https://developer.android.com/tools/adb)，设备可通过 `adb devices` 识别
+- Python 3.8+ 虚拟环境（推荐）
 
 ### 2. 安装依赖
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 配置设备信息
-编辑 `config/config.py` 文件，设置设备ID和其他测试参数：
-```python
-# 设备ID
-DEFAULT_DEVICE_ID = "192.168.20.152:5555"
+### 3. 校验配置（无需设备）
 
-# 测试参数
-DEFAULT_MONKEY_COUNT = 10000  # 默认事件数量
-DEFAULT_MONKEY_THROTTLE = 100  # 默认事件间隔（毫秒）
-```
-
-### 4. 运行测试
-使用主入口文件运行测试：
 ```bash
-python main.py --device 192.168.20.152:5555 --package com.example.app --events 10000
+python main.py --validate-only --engine kea2
+pytest tests/ -v
 ```
 
-**参数说明**：
-- `--device`：设备ID（可选，默认使用 config.py / 环境变量）
-- `--package`：应用包名（可选）
-- `--events`：事件数量（可选）
-- `--output`：输出目录（可选，默认 `outputs`）
-- `--format`：报告格式（可选，默认 `html`，支持 `json`）
-- `--validate-only`：仅校验配置后退出，不连接设备（适用于 CI/Jenkins）
-- `--report-only DIR`：从指定目录根据已有 logcat.log 等生成报告，不执行 Monkey
-- `--report-output FILE`：与 `--report-only` 配合，指定报告输出路径
+### 4. 运行 Kea2 稳定性测试（默认引擎）
 
-### 5. Jenkins / CI 集成
-- **仅校验配置**（无需设备，用于检查参数或流水线配置）：
-  ```bash
-  python main.py --validate-only
-  ```
-- **仅生成报告**（根据已有输出目录补生成报告）：
-  ```bash
-  python main.py --report-only outputs/20250101_120000 --format html --report-output report.html
-  ```
-- **运行单元测试**（无需设备）：
-  ```bash
-  pip install -r requirements.txt
-  pytest tests/ -v
-  ```
-- 建议在 Jenkins 中先执行 `python main.py --validate-only` 或 `pytest tests/`，再在有设备的节点上执行完整 Monkey 测试。
+```bash
+python main.py --engine kea2 \
+  --device 192.168.20.81:5555 \
+  --package com.aeke.fitnessmirror \
+  --running-minutes 60 \
+  --scenarios all \
+  --output outputs
+```
+
+首次运行若缺少 `configs/`，会自动执行 `kea2 init`。力量镜黑名单请维护 **`configs/widget.block.py`**（屏蔽 Sleep 等系统栏按钮）和 **`configs/abl.strings`**。
+
+### 5. Monkey 冒烟（可选）
+
+```bash
+python main.py --engine monkey \
+  --device <DEVICE_ID> \
+  --package com.aeke.fitnessmirror \
+  --events 5000 \
+  --output outputs
+```
+
+### 6. 从已有产出补生成报告
+
+```bash
+python main.py --report-only outputs/2026-07-23_16-27-53 --format html
+```
+
+---
+
+## 命令行参数
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `--engine` | `kea2` | `kea2` 或 `monkey` |
+| `--device` | 见 settings | 设备 ID（`adb devices`） |
+| `--package` | `com.aeke.fitnessmirror` | 应用包名 |
+| `--running-minutes` | 60 | Kea2 运行时长（分钟） |
+| `--scenarios` | `all` | 场景别名或 `test_*.py`，逗号分隔 |
+| `--events` | 100 | Monkey 事件数（仅 monkey 引擎） |
+| `--output` | `outputs` | 产出根目录 |
+| `--format` | `html` | 报告格式：`html` / `json` |
+| `--profile` | `DEFAULT` | `config.ini` 中的 profile |
+| `--baseline` | — | 性能基线 JSON，用于回归对比 |
+| `--validate-only` | — | 仅校验配置，不连设备 |
+| `--report-only DIR` | — | 从已有目录生成报告 |
+| `--report-output FILE` | — | 配合 `--report-only` 指定输出路径 |
+
+---
 
 ## 配置说明
-### 环境变量
-可以通过环境变量覆盖默认配置：
-- `MONKEY_DEVICE_ID`：设备ID
-- `MONKEY_PACKAGE_NAME`：应用包名
-- `MONKEY_EVENT_COUNT`：事件数量
 
-### 配置文件
-也可以在 `config/config.py` 中直接修改默认配置。
+**优先级**：命令行参数 > 环境变量 > 项目根 `config.ini` > `settings/config.py` 默认值。
 
-## 测试报告
-测试完成后，报告将生成在 `outputs/` 目录下，包括：
-- HTML格式报告
-- JSON格式报告
-- 性能数据报告
+### 常用环境变量
 
-报告包含以下内容：
-- 测试基本信息（设备、时间、事件数等）
-- 崩溃信息（如果有）
-- 性能数据（CPU、内存、FPS）
-- 测试日志
+| 变量 | 说明 |
+|------|------|
+| `TEST_ENGINE` | `kea2` / `monkey` |
+| `MONKEY_DEVICE_ID` | 设备 ID |
+| `MONKEY_PACKAGE_NAME` | 包名 |
+| `KEA2_RUNNING_MINUTES` | Kea2 时长 |
+| `KEA2_THROTTLE` | Fastbot 操作间隔（ms） |
+| `PERF_CPU_THRESHOLD` | CPU 告警阈值（%） |
+| `PERF_MEM_THRESHOLD` | 内存告警阈值（MB） |
+| `PERF_FPS_THRESHOLD` | FPS 告警阈值 |
+
+完整列表见 [`settings/config.py`](settings/config.py)。
+
+### config.ini（可选）
+
+在项目根创建 `config.ini`，按 profile 覆盖设备与参数：
+
+```ini
+[DEFAULT]
+DEVICE_ID = 192.168.20.81:5555
+PACKAGE_NAME = com.aeke.fitnessmirror
+KEA2_RUNNING_MINUTES = 120
+TEST_ENGINE = kea2
+```
+
+---
+
+## 测试产出
+
+每次运行在 `outputs/<timestamp>/` 下生成：
+
+| 路径 | 内容 |
+|------|------|
+| `report.html` / `report.json` | 统一报告（崩溃、性能、Kea2 属性违规、门禁状态） |
+| `kea2/` | Kea2 原始结果、Fastbot 日志 |
+| `performance/` | CSV / JSON 性能时序与摘要 |
+| `logcat.log` | 测试期间 Logcat |
+| `kea2_run_meta.json` | 运行元数据 |
+
+框架日志滚动写入 `outputs/logs/monkey_test.log`。
+
+### 门禁（gate_status）
+
+报告 JSON 中的 `gate_status` 综合判断：崩溃数、Kea2 属性违规、性能超阈等。CI 可根据 `passed` 字段决定构建成败，参见 [`Jenkinsfile.example`](Jenkinsfile.example)。
+
+---
+
+## Jenkins / CI 建议
+
+```bash
+# 流水线前置：无设备节点
+pip install -r requirements.txt
+python main.py --validate-only --engine kea2
+pytest tests/ -v
+
+# 有设备节点
+python main.py --engine kea2 \
+  --device $DEVICE_ID \
+  --package com.aeke.fitnessmirror \
+  --running-minutes $RUNNING_MINUTES \
+  --scenarios "${SCENARIOS:-all}" \
+  --output outputs
+```
+
+后置脚本解析 `report.json`、推送飞书通知的示例见 `Jenkinsfile.example`。
+
+---
 
 ## 常见问题
-### 1. 设备连接问题
-- 确保设备已通过USB连接到电脑
-- 运行 `adb devices` 确认设备已被识别
-- 检查设备ID是否正确配置
 
-### 2. 权限问题
-- 确保设备已开启USB调试模式
-- 对于Android 6.0+设备，需要授予应用权限
+| 现象 | 处理 |
+|------|------|
+| `UnboundLocalError: current` / 秒退 | `--act-blacklist-file` 必须带设备路径 `/sdcard/.kea2/abl.strings`，不能只写 flag |
+| `AdbError: FAIL`（push 黑名单） | 勿传 Windows 本地路径给 `--act-blacklist-file` |
+| `No module named 'scenarios'` | 使用最新代码（自动 `PYTHONPATH=项目根`） |
+| `PermissionError` … `__pycache__` | 最新代码会在 `configs/` 预建 `__pycache__` |
+| 秒停、无 `res_*` 产出 | 查看 `outputs/<dir>/kea2_subprocess.log` 完整 Kea2 日志 |
+| 镜子黑屏 / 睡眠 | 检查 `configs/widget.block.py` 是否屏蔽 Sleep |
+| ADB / pidof 报错 | 可调大 `PERF_MONITOR_INTERVAL` 降低 ADB 争抢 |
 
-### 3. 测试失败问题
-- 检查应用是否正常安装
-- 查看 `outputs/logs/` 目录下的日志文件
-- 检查设备是否有足够的存储空间
+更多排查见 [`docs/issues_solutions.md`](docs/issues_solutions.md)。
 
-### 4. 性能监控问题
-- 确保应用正在运行
-- 检查应用包名是否正确
-- 查看性能数据报告
+---
 
-## 优化特点
-- **统一配置管理**：支持环境变量和配置文件双重配置
-- **增强的崩溃检测**：实时监控和分析应用崩溃
-- **详细的测试报告**：HTML和JSON格式，包含丰富的测试信息
-- **灵活的日志系统**：支持多级别日志和文件轮转
-- **Page Object模式**：提高代码可维护性和复用性
-- **多设备支持**：可配置不同设备ID进行测试
-- **性能监控**：实时监测应用的CPU、内存和FPS表现
+## 相关文档
 
-## 贡献指南
-1. Fork本项目
-2. 创建功能分支
-3. 提交代码
-4. 发起Pull Request
+- [`docs/iteration_process.md`](docs/iteration_process.md) — 迭代与架构演进
+- [`docs/issues_solutions.md`](docs/issues_solutions.md) — 问题与解决方案
+- [`settings/README.md`](settings/README.md) — 框架配置说明
+- [`configs/README.md`](configs/README.md) — Fastbot 配置说明
+
+---
 
 ## 许可证
-本项目采用MIT许可证。
-<<<<<<< HEAD
-=======
 
-## 项目周期
-- 2025年1月10日-2025年2月30日
->>>>>>> bc185e8 (Monkey稳定性测试)
-=======
-
-## 文档说明
-- **README.md**：项目说明文档
-- **docs/iteration_process.md**：项目迭代过程文档
-- **docs/issues_solutions.md**：项目问题和解决方案文档
->>>>>>> a8c8655 (feat: 添加性能监控模块并优化日志处理)
+MIT License

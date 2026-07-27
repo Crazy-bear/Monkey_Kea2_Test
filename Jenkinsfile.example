@@ -1,100 +1,139 @@
 #!/bin/bash
+# Jenkins 后置脚本示例：Kea2 / Monkey 稳定性测试报告解析与飞书通知
+# Pipeline 参数建议：ENGINE=kea2|monkey, RUNNING_MINUTES, SCENARIOS, DEVICE_ID, PACKAGE_NAME
 
-JENKINS_URL="https://jenkins.aeke.net"
-JOB_NAME="monkey-auto-test"
-VIEW_NAME="auto-test"
+JENKINS_URL="${JENKINS_URL:-https://jenkins.aeke.net}"
+JOB_NAME="${JOB_NAME:-fitness-stability-test}"
+VIEW_NAME="${VIEW_NAME:-auto-test}"
+ENGINE="${ENGINE:-kea2}"
 
-echo "===== 查找测试报告 ====="
+echo "===== 查找测试报告 (engine=${ENGINE}) ====="
 
-REPORT_FILE=$(find outputs -name "*.html" | sort | tail -1)
+REPORT_JSON=$(find outputs -name "report.json" 2>/dev/null | sort | tail -1)
+REPORT_FILE=$(find outputs -name "report.html" 2>/dev/null | sort | tail -1)
 
-if [ -z "$REPORT_FILE" ]; then
+if [ -z "$REPORT_FILE" ] && [ -z "$REPORT_JSON" ]; then
     echo "未找到报告文件"
     REPORT_URL="${JENKINS_URL}/view/${VIEW_NAME}/job/${JOB_NAME}/${BUILD_NUMBER}/artifact/outputs/"
 else
-    echo "报告路径: $REPORT_FILE"
-    RELATIVE_PATH=${REPORT_FILE#outputs/}
-    REPORT_URL="${JENKINS_URL}/view/${VIEW_NAME}/job/${JOB_NAME}/${BUILD_NUMBER}/artifact/outputs/${RELATIVE_PATH}"
+    if [ -n "$REPORT_FILE" ]; then
+        echo "HTML 报告路径: $REPORT_FILE"
+        RELATIVE_PATH=${REPORT_FILE#outputs/}
+        REPORT_URL="${JENKINS_URL}/view/${VIEW_NAME}/job/${JOB_NAME}/${BUILD_NUMBER}/artifact/outputs/${RELATIVE_PATH}"
+    fi
+    if [ -n "$REPORT_JSON" ]; then
+        echo "JSON 报告路径: $REPORT_JSON"
+    fi
 fi
 
-# 复制报告到固定路径，供 HTML Publisher 使用（避免通配符问题）
 if [ -f "$REPORT_FILE" ]; then
     mkdir -p outputs/latest
     cp "$REPORT_FILE" outputs/latest/report.html
 fi
+if [ -f "$REPORT_JSON" ]; then
+    mkdir -p outputs/latest
+    cp "$REPORT_JSON" outputs/latest/report.json
+fi
 
-echo "===== 解析崩溃次数 ====="
+echo "===== 从 JSON 解析测试结果 ====="
 
 CRASH_COUNT=0
+APP_VERSION="未知"
+FIRMWARE_VERSION="未知"
+DURATION="未知"
+TEST_ENGINE="未知"
+GATE_PASSED="true"
+GATE_REASONS=""
+PROPERTY_VIOLATIONS=0
+KEA2_EXIT_CODE=""
+CRASH_SUMMARY=""
 
-if [ -f "$REPORT_FILE" ]; then
-    # 从 HTML div 结构中提取崩溃次数（兼容内联样式格式）
-    CRASH_COUNT=$(grep -A2 "崩溃次数" "$REPORT_FILE" | grep -Eo ">[0-9]+<" | grep -Eo "[0-9]+" | head -1)
-    if [ -z "$CRASH_COUNT" ]; then
-        CRASH_COUNT=0
+_parse_json_field() {
+    python3 - "$1" "$2" <<'PY'
+import json, sys
+path, key = sys.argv[1], sys.argv[2]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    val = data
+    for part in key.split("."):
+        if isinstance(val, dict):
+            val = val.get(part)
+        else:
+            val = None
+            break
+    if val is None:
+        print("")
+    elif isinstance(val, (dict, list)):
+        print(json.dumps(val, ensure_ascii=False))
+    else:
+        print(val)
+except Exception:
+    print("")
+PY
+}
+
+if [ -f "$REPORT_JSON" ]; then
+    CRASH_COUNT=$(_parse_json_field "$REPORT_JSON" "crash_count")
+    APP_VERSION=$(_parse_json_field "$REPORT_JSON" "device_version_name")
+    FIRMWARE_VERSION=$(_parse_json_field "$REPORT_JSON" "firmware_version")
+    DURATION=$(_parse_json_field "$REPORT_JSON" "duration")
+    TEST_ENGINE=$(_parse_json_field "$REPORT_JSON" "test_engine")
+    GATE_PASSED=$(_parse_json_field "$REPORT_JSON" "gate_status.passed")
+    PROPERTY_VIOLATIONS=$(_parse_json_field "$REPORT_JSON" "kea2.property_violation_count")
+    KEA2_EXIT_CODE=$(_parse_json_field "$REPORT_JSON" "kea2.exit_code")
+
+    REASONS_JSON=$(_parse_json_field "$REPORT_JSON" "gate_status.reasons")
+    if [ -n "$REASONS_JSON" ] && [ "$REASONS_JSON" != "[]" ]; then
+        GATE_REASONS=$(python3 - "$REPORT_JSON" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    reasons = (json.load(f).get("gate_status") or {}).get("reasons") or []
+print("\\n".join(reasons))
+PY
+)
+    fi
+
+    CATEGORIES=$(_parse_json_field "$REPORT_JSON" "log_analysis.crash_categories")
+    if [ -n "$CATEGORIES" ] && [ "$CATEGORIES" != "{}" ]; then
+        CRASH_SUMMARY=$(python3 - "$REPORT_JSON" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = json.load(f)
+cats = (data.get("log_analysis") or {}).get("crash_categories") or {}
+print("\\n".join(f"{k}: {v}次" for k, v in cats.items()))
+PY
+)
     fi
 fi
 
+CRASH_COUNT=${CRASH_COUNT:-0}
+PROPERTY_VIOLATIONS=${PROPERTY_VIOLATIONS:-0}
+TEST_ENGINE=${TEST_ENGINE:-$ENGINE}
+
+echo "测试引擎: $TEST_ENGINE"
 echo "崩溃次数: $CRASH_COUNT"
-
-echo "===== 获取应用版本 ====="
-
-APP_VERSION=""
-
-if [ -f "$REPORT_FILE" ]; then
-    # 从 HTML div 结构中提取应用版本（兼容内联样式格式）
-    APP_VERSION=$(grep -A2 "应用版本" "$REPORT_FILE" | grep -Eo ">[0-9]+(\.[0-9]+)+<" | grep -Eo "[0-9]+(\.[0-9]+)+" | head -1)
-fi
-
-if [ -z "$APP_VERSION" ]; then
-    APP_VERSION="未知"
-fi
-
+echo "属性违反: $PROPERTY_VIOLATIONS"
+echo "Kea2 退出码: $KEA2_EXIT_CODE"
+echo "门禁通过: $GATE_PASSED"
 echo "应用版本: $APP_VERSION"
-
-echo "===== 获取主板固件 ====="
-
-FIRMWARE_VERSION=""
-
-if [ -f "$REPORT_FILE" ]; then
-    FIRMWARE_VERSION=$(grep "主板固件" "$REPORT_FILE" | grep -Eo "<td[^>]*>[^<]+</td>" | tail -1 | sed 's/<[^>]*>//g' | tr -d ' ')
-fi
-
-if [ -z "$FIRMWARE_VERSION" ]; then
-    FIRMWARE_VERSION="未知"
-fi
-
-echo "主板固件: $FIRMWARE_VERSION"
-
-echo "===== 获取测试时长 ====="
-
-DURATION=""
-if [ -f "$REPORT_FILE" ]; then
-    # 时长在"测试时长"标签前面的div里，格式如 ">12秒<"
-    DURATION=$(grep -B2 "测试时长" "$REPORT_FILE" | grep -Eo ">[0-9]+秒<" | grep -Eo "[0-9]+秒" | head -1)
-fi
-if [ -z "$DURATION" ]; then
-    DURATION="未知"
-fi
-echo "测试时长: $DURATION"
-
-echo "===== 获取崩溃分类 ====="
-
-CRASH_SUMMARY=""
-if [ -f "$REPORT_FILE" ] && [ "$CRASH_COUNT" -gt 0 ]; then
-    # 提取崩溃分类，每条用 \n 分隔（飞书 lark_md 换行符）
-    CRASH_SUMMARY=$(grep -Eo '[A-Za-z]+Exception: [0-9]+次|ANR: [0-9]+次|Other: [0-9]+次' "$REPORT_FILE" | head -5 | awk '{printf "%s\\n", $0}' | sed 's/\\n$//')
-fi
 
 echo "===== 发送飞书通知 ====="
 
-# 根据崩溃次数设置状态和卡片颜色
-if [ "$CRASH_COUNT" -eq 0 ]; then
+if [ "$GATE_PASSED" = "True" ] || [ "$GATE_PASSED" = "true" ]; then
     TEST_STATUS="✅ 通过"
     CARD_COLOR="green"
 else
-    TEST_STATUS="❌ 失败（崩溃 ${CRASH_COUNT} 次）"
+    TEST_STATUS="❌ 失败"
     CARD_COLOR="red"
+    if [ -n "$GATE_REASONS" ]; then
+        TEST_STATUS="❌ 失败（${GATE_REASONS//$'\n'/；}）"
+    fi
+fi
+
+EXEC_LABEL="${RUNNING_MINUTES:-N/A} 分钟"
+if [ "$TEST_ENGINE" = "monkey" ]; then
+    EXEC_LABEL="${EVENT_COUNT:-N/A} 事件"
 fi
 
 JSON=$(cat <<EOF
@@ -104,7 +143,7 @@ JSON=$(cat <<EOF
     "header": {
       "title": {
         "tag": "plain_text",
-        "content": "Monkey 稳定性测试报告"
+        "content": "力量镜稳定性测试报告 (${TEST_ENGINE})"
       },
       "template": "${CARD_COLOR}"
     },
@@ -114,33 +153,32 @@ JSON=$(cat <<EOF
         "fields": [
           {
             "is_short": true,
-            "text": { "tag": "lark_md", "content": "**构建编号**\n${BUILD_NUMBER}" }
+            "text": { "tag": "lark_md", "content": "**构建编号**\\n${BUILD_NUMBER}" }
           },
           {
             "is_short": true,
-            "text": { "tag": "lark_md", "content": "**测试结果**\n${TEST_STATUS}" }
+            "text": { "tag": "lark_md", "content": "**测试结果**\\n${TEST_STATUS}" }
           },
           {
             "is_short": true,
-            "text": { "tag": "lark_md", "content": "**应用包名**\n${PACKAGE_NAME}" }
+            "text": { "tag": "lark_md", "content": "**测试引擎**\\n${TEST_ENGINE}" }
           },
           {
             "is_short": true,
-            "text": { "tag": "lark_md", "content": "**应用版本**\n${APP_VERSION}" }
+            "text": { "tag": "lark_md", "content": "**应用包名**\\n${PACKAGE_NAME}" }
           },
           {
             "is_short": true,
-            "text": { "tag": "lark_md", "content": "**主板固件**\n${FIRMWARE_VERSION}" }
+            "text": { "tag": "lark_md", "content": "**应用版本**\\n${APP_VERSION}" }
           },
           {
             "is_short": true,
-            "text": { "tag": "lark_md", "content": "**设备ID**\n${DEVICE_ID}" }
+            "text": { "tag": "lark_md", "content": "**崩溃 / 属性违反**\\n${CRASH_COUNT} / ${PROPERTY_VIOLATIONS}" }
           },
           {
             "is_short": true,
-            "text": { "tag": "lark_md", "content": "**事件数量 / 时长**\n${EVENT_COUNT} 次 / ${DURATION}" }
+            "text": { "tag": "lark_md", "content": "**执行规模 / 时长**\\n${EXEC_LABEL} / ${DURATION}" }
           }
-          $([ -n "$CRASH_SUMMARY" ] && echo ",{\"is_short\": false, \"text\": { \"tag\": \"lark_md\", \"content\": \"**崩溃分类**\\n${CRASH_SUMMARY}\" }}")
         ]
       },
       {
@@ -160,10 +198,35 @@ JSON=$(cat <<EOF
 EOF
 )
 
-curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -d "$JSON" \
-  https://open.feishu.cn/open-apis/bot/v2/hook/a13b2176-4f1f-4cb5-a88e-e656abc9f25f
+MAX_RETRY=3
+RETRY_INTERVAL=15
+
+for i in $(seq 1 $MAX_RETRY); do
+    RESPONSE=$(curl -s -X POST \
+      -H "Content-Type: application/json" \
+      -d "$JSON" \
+      "${FEISHU_WEBHOOK_URL:-https://open.feishu.cn/open-apis/bot/v2/hook/a13b2176-4f1f-4cb5-a88e-e656abc9f25f}")
+
+    echo "飞书响应: $RESPONSE"
+    CODE=$(echo "$RESPONSE" | grep -Eo '"code":[0-9]+' | grep -Eo '[0-9]+')
+    if [ "$CODE" = "0" ] || [ -z "$CODE" ]; then
+        echo "飞书通知发送成功"
+        break
+    elif [ "$CODE" = "11232" ]; then
+        echo "触发频率限制，${RETRY_INTERVAL}秒后重试（第${i}次）..."
+        sleep $RETRY_INTERVAL
+    else
+        echo "发送失败，code=${CODE}"
+        break
+    fi
+done
 
 echo ""
-echo "===== 完成 ====="
+echo "===== Jenkins 门禁 ====="
+if [ "$GATE_PASSED" = "True" ] || [ "$GATE_PASSED" = "true" ]; then
+    echo "门禁通过"
+    exit 0
+else
+    echo "门禁失败"
+    exit 1
+fi
