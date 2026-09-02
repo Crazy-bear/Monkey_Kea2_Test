@@ -13,6 +13,10 @@ def global_block_widgets(d: "Device"):
         d(text="Sleep"),
         d(text="睡眠"),
         d(textContains="Sleep"),
+        d(text="Wallpaper"),
+        d(text="壁纸"),
+        d(resourceId="com.aeke.fitnessmirror:id/sleep"),
+        d(resourceId="com.aeke.fitnessmirror:id/screen"),
         d(text="Fold"),
         d(text="Retract rope"),
         d(text="收绳"),
@@ -24,6 +28,14 @@ def global_block_widgets(d: "Device"):
         d(text="Factory reset"),
         d(text="Uninstall"),
         d(text="Clear data"),
+        # Settings — 恢复出厂/重置设备（稳定性测试禁止触发）
+        d(text="Reset Device"),
+        d(resourceId="com.aeke.fitnessmirror:id/tv_sure"),
+        # 控制栏 WiFi — 忘记网络会导致断网，稳定性测试禁止触发
+        d(text="Forget"),
+        d(text="忘记"),
+        d(resourceId="com.aeke.fitnessmirror:id/tv_wifi_delete_curr"),
+        d(resourceId="com.aeke.fitnessmirror:id/ctl_wifi_title_right"),
     ]
 
 

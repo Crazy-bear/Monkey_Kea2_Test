@@ -20,17 +20,36 @@ class Config:
     DEFAULT_EVENT_COUNT = 100
     DEFAULT_PROFILE = "DEFAULT"
     DEFAULT_TEST_ENGINE = "kea2"
+    DEFAULT_OUTPUT_DIR = "outputs"
+    DEFAULT_SCENARIOS = "all"
 
     # 场景别名 -> 属性脚本文件名
     SCENARIO_ALIASES = {
-        "main": "test_main_navigation.py",
-        "navigation": "test_main_navigation.py",
+        "home": "test_home.py",
+        "main": "test_home.py",
+        "navigation": "test_home.py",
+        "lifestyle": "test_lifestyle.py",
+        "media": "test_lifestyle.py",
+        "guide": "test_lifestyle.py",
         "suixinlian": "test_suixinlian.py",
         "course": "test_course.py",
         "profile": "test_profile_plan.py",
-        "plan": "test_profile_plan.py",
-        "media": "test_media_guide.py",
-        "guide": "test_media_guide.py",
+        "plan": "test_programs.py",
+        "programs": "test_programs.py",
+        "assessment": "test_assessment.py",
+        "ai_coach": "test_ai_coach.py",
+        "aicoach": "test_ai_coach.py",
+        "schedule": "test_schedule.py",
+        "calendar": "test_schedule.py",
+        "control_panel": "test_control_panel.py",
+        "control": "test_control_panel.py",
+        "data_center": "test_data_center.py",
+        "datacenter": "test_data_center.py",
+        "effort": "test_data_center.py",
+        "floating_touch": "test_floating_touch.py",
+        "touch": "test_floating_touch.py",
+        "touch_menu": "test_floating_touch.py",
+        "settings": "test_settings.py",
     }
 
     def __init__(self, profile=None, config_file=None, test_engine=None):
@@ -68,6 +87,8 @@ class Config:
         self.KEA2_THROTTLE = int(os.environ.get("KEA2_THROTTLE", "200"))
         self.KEA2_SCENARIOS_DIR = os.environ.get("KEA2_SCENARIOS_DIR", "scenarios")
         self.KEA2_LOG_BUFFER_SECONDS = int(os.environ.get("KEA2_LOG_BUFFER_SECONDS", "120"))
+        self.OUTPUT_DIR = self.DEFAULT_OUTPUT_DIR
+        self.SCENARIOS = self.DEFAULT_SCENARIOS
 
         self.PERF_CPU_THRESHOLD = float(os.environ.get("PERF_CPU_THRESHOLD", 80.0))
         self.PERF_MEM_THRESHOLD = float(os.environ.get("PERF_MEM_THRESHOLD", 512.0))
@@ -94,9 +115,13 @@ class Config:
         self.SEED = int(os.environ.get("MONKEY_SEED", datetime.datetime.now().strftime("%Y%m%d%H%M")))
         self._scenario_filter = None
 
-        if os.path.exists(self.config_file):
+        config_path = self.config_file
+        if not os.path.isabs(config_path):
+            config_path = os.path.join(self._project_root(), config_path)
+
+        if os.path.exists(config_path):
             parser = configparser.ConfigParser()
-            parser.read(self.config_file, encoding="utf-8")
+            parser.read(config_path, encoding="utf-8")
             section = self.profile if self.profile in parser else "DEFAULT"
             if section in parser:
                 sec = parser[section]
@@ -112,6 +137,19 @@ class Config:
                     self.TEST_ENGINE = sec.get("TEST_ENGINE", self.TEST_ENGINE).lower()
                 if sec.get("KEA2_RUNNING_MINUTES"):
                     self.KEA2_RUNNING_MINUTES = int(sec.get("KEA2_RUNNING_MINUTES", self.KEA2_RUNNING_MINUTES))
+                if sec.get("OUTPUT_DIR"):
+                    self.OUTPUT_DIR = sec.get("OUTPUT_DIR", self.OUTPUT_DIR).strip()
+                elif sec.get("OUTPUT"):
+                    self.OUTPUT_DIR = sec.get("OUTPUT", self.OUTPUT_DIR).strip()
+                if sec.get("SCENARIOS"):
+                    self.SCENARIOS = sec.get("SCENARIOS", self.SCENARIOS).strip()
+
+        if os.environ.get("KEA2_OUTPUT_DIR"):
+            self.OUTPUT_DIR = os.environ.get("KEA2_OUTPUT_DIR").strip()
+        if os.environ.get("KEA2_SCENARIOS"):
+            self.SCENARIOS = os.environ.get("KEA2_SCENARIOS").strip()
+
+        self.set_scenario_filter(self.SCENARIOS)
 
     def set_scenario_filter(self, scenarios_csv):
         """设置场景过滤，如 suixinlian,course 或 all。"""
@@ -123,6 +161,9 @@ class Config:
 
     def get_scenarios_dir(self):
         return self._resolve_path(self.KEA2_SCENARIOS_DIR)
+
+    def get_output_dir(self):
+        return self._resolve_path(self.OUTPUT_DIR)
 
     def get_configs_dir(self):
         return os.path.join(self._project_root(), "configs")

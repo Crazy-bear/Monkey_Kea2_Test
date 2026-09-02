@@ -34,13 +34,34 @@ class TestKea2Runner:
                 p.replace("\\", "/").endswith("configs/abl.strings") for p in cmd
             )
 
-    def test_build_discover_args(self):
+    def test_build_discover_args_single_pattern_uses_discover(self):
         from orchestrator.kea2_runner import build_discover_args
 
         config = Config(test_engine="kea2")
+        config.set_scenario_filter("home")
         discover = build_discover_args(config)
-        assert discover[0:3] == ["propertytest", "discover", "-s"]
-        assert any("scenarios" in p for p in discover)
+        assert discover[:4] == ["propertytest", "discover", "-s", config.get_scenarios_dir()]
+        assert discover[-1] == "test_home.py"
+
+    def test_build_discover_args_multi_pattern_uses_modules(self):
+        from orchestrator.kea2_runner import build_discover_args
+
+        config = Config(test_engine="kea2")
+        config.set_scenario_filter("home,course,data_center")
+        discover = build_discover_args(config)
+        assert discover[0] == "propertytest"
+        assert "discover" not in discover
+        assert "scenarios.test_home" in discover
+        assert "scenarios.test_course" in discover
+        assert "scenarios.test_data_center" in discover
+
+    def test_build_discover_args_all_uses_single_glob(self):
+        from orchestrator.kea2_runner import build_discover_args
+
+        config = Config(test_engine="kea2")
+        config.set_scenario_filter("all")
+        discover = build_discover_args(config)
+        assert discover[-1] == "test_*.py"
 
     @patch("orchestrator.kea2_runner.generate_kea2_native_report")
     @patch("orchestrator.kea2_runner.validate_kea2_preflight", return_value=(True, ""))

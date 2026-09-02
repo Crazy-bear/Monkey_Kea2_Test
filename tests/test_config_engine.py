@@ -41,3 +41,31 @@ class TestConfigEngine:
         config = Config()
         config.set_scenario_filter("all")
         assert config.get_scenario_patterns() == ["test_*.py"]
+
+    def test_load_scenarios_and_output_from_ini(self, tmp_path, monkeypatch):
+        from settings.config import Config
+
+        ini = tmp_path / "config.ini"
+        ini.write_text(
+            "[DEFAULT]\n"
+            "DEVICE_ID = test-device\n"
+            "SCENARIOS = main\n"
+            "OUTPUT_DIR = my_outputs\n",
+            encoding="utf-8",
+        )
+        monkeypatch.delenv("KEA2_SCENARIOS", raising=False)
+        monkeypatch.delenv("KEA2_OUTPUT_DIR", raising=False)
+        config = Config(config_file=str(ini), test_engine="kea2")
+        assert config.SCENARIOS == "main"
+        assert config.get_scenario_patterns() == ["test_home.py"]
+        assert config.get_output_dir().endswith("my_outputs")
+
+    def test_env_overrides_ini_for_scenarios(self, tmp_path, monkeypatch):
+        from settings.config import Config
+
+        ini = tmp_path / "config.ini"
+        ini.write_text("[DEFAULT]\nSCENARIOS = course\n", encoding="utf-8")
+        monkeypatch.setenv("KEA2_SCENARIOS", "main")
+        config = Config(config_file=str(ini))
+        assert config.SCENARIOS == "main"
+        assert config.get_scenario_patterns() == ["test_home.py"]

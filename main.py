@@ -241,10 +241,15 @@ def main():
     parser.add_argument(
         "--scenarios",
         type=str,
-        default="all",
-        help="场景模块，逗号分隔或 all（如 suixinlian,course）",
+        default=None,
+        help="场景模块，逗号分隔或 all（默认读 config.ini / KEA2_SCENARIOS）",
     )
-    parser.add_argument("--output", type=str, default="outputs", help="输出目录")
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="输出目录（默认读 config.ini / KEA2_OUTPUT_DIR）",
+    )
     parser.add_argument(
         "--format",
         type=str,
@@ -269,7 +274,10 @@ def main():
         config.EVENT_COUNT = args.events
     if args.running_minutes:
         config.KEA2_RUNNING_MINUTES = args.running_minutes
-    config.set_scenario_filter(args.scenarios)
+    if args.scenarios is not None:
+        config.set_scenario_filter(args.scenarios)
+
+    output_root = args.output if args.output is not None else config.get_output_dir()
 
     if args.validate_only:
         return run_validate_only(config, engine=config.TEST_ENGINE)
@@ -289,7 +297,7 @@ def main():
         return 1
 
     timestamp = get_timestamp()
-    output_dir = os.path.join(args.output, timestamp)
+    output_dir = os.path.join(output_root, timestamp)
     create_output_dirs(output_dir)
 
     report_generator = ReportGenerator()

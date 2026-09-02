@@ -65,3 +65,28 @@ class TestLogcatHandler:
         ]
         events = extract_crash_events(lines)
         assert events == []
+
+    def test_ignore_gc_and_fastbot_media_provider_noise(self):
+        from core.logcat_handler import extract_crash_events
+
+        lines = [
+            "07-28 15:56:35.985  1292  1306 I rkstack.process: Background concurrent mark compact GC freed 33659(2520KB) AllocSpace objects, 0(0B) LOS objects, 49% free, 2647KB/5294KB, paused 376us,7.339ms total 46.546ms",
+            "07-28 16:02:04.490  1706  1856 W MediaProvider: java.io.IOException: Failed to update quota type for /storage/emulated/0/fastbot_com.aeke.fitnessmirror.fbm.tmp",
+        ]
+        events = extract_crash_events(lines, "com.aeke.fitnessmirror")
+        assert events == []
+
+    def test_fatal_exception_merges_into_single_event(self):
+        from core.logcat_handler import extract_crash_events
+
+        log = """
+03-17 10:00:01.123  1234  5678 E AndroidRuntime: FATAL EXCEPTION: main
+03-17 10:00:01.124  1234  5678 E AndroidRuntime: Process: com.aeke.fitnessmirror, PID: 1234
+03-17 10:00:01.125  1234  5678 E AndroidRuntime: java.lang.NullPointerException: test crash
+03-17 10:00:01.126  1234  5678 E AndroidRuntime:     at com.aeke.fitnessmirror.MainActivity.onCreate(MainActivity.java:42)
+"""
+        events = extract_crash_events(log.splitlines(), "com.aeke.fitnessmirror")
+        assert len(events) == 1
+        assert events[0]["category"] == "NullPointerException"
+        assert "FATAL EXCEPTION" in events[0]["message"]
+        assert "MainActivity.onCreate" in events[0]["message"]

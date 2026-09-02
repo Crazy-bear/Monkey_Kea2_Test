@@ -18,11 +18,21 @@
 
 | 场景模块 | 脚本 | 别名 |
 |----------|------|------|
-| 主导航 | `test_main_navigation.py` | `main`, `navigation` |
+| Home 首页 | `test_home.py` | `home`（`main`/`navigation` 为兼容别名） |
+| Lifestyle 娱乐 | `test_lifestyle.py` | `lifestyle`（`media`/`guide` 为兼容别名） |
 | 随心练 | `test_suixinlian.py` | `suixinlian` |
 | 精品课程 | `test_course.py` | `course` |
-| 个人中心 / 运动计划 | `test_profile_plan.py` | `profile`, `plan` |
-| 音乐 / 使用指南 | `test_media_guide.py` | `media`, `guide` |
+| 运动测评 | `test_assessment.py` | `assessment` |
+| AI Coach | `test_ai_coach.py` | `ai_coach`, `aicoach` |
+| 运动计划 | `test_programs.py` | `programs`, `plan` |
+| 个人中心 | `test_profile_plan.py` | `profile` |
+| 日历 / 日程 | `test_schedule.py` | `schedule`, `calendar` |
+| 控制面板 | `test_control_panel.py` | `control_panel`, `control` |
+| 数据中心 | `test_data_center.py` | `data_center`, `datacenter`, `effort` |
+| 悬浮 Touch | `test_floating_touch.py` | `floating_touch`, `touch`, `touch_menu` |
+| 设置 | `test_settings.py` | `settings` |
+
+Page 定位依据 `S1Pro_UI/v3.0.0.6858/` 下的 UI dump；`--scenarios all` 运行上表全部模块。
 
 ---
 
@@ -60,7 +70,7 @@ main.py
 ├── configs/                # Kea2/Fastbot 配置（自动 kea2 init）
 ├── orchestrator/           # 测试编排（Kea2 运行、报告组装）
 ├── scenarios/              # Kea2 属性脚本
-├── pages/                  # Page Object（main_page 等）
+├── pages/                  # Page Object（home_page / lifestyle_page 等）
 ├── core/                   # ADB、Logcat、报告、Monkey
 ├── performance/            # 性能监控
 ├── templates/              # 可选 HTML 报告模板
@@ -166,6 +176,8 @@ python main.py --report-only outputs/2026-07-23_16-27-53 --format html
 | `MONKEY_DEVICE_ID` | 设备 ID |
 | `MONKEY_PACKAGE_NAME` | 包名 |
 | `KEA2_RUNNING_MINUTES` | Kea2 时长 |
+| `KEA2_SCENARIOS` | 场景别名或 `all` |
+| `KEA2_OUTPUT_DIR` | 产出根目录 |
 | `KEA2_THROTTLE` | Fastbot 操作间隔（ms） |
 | `PERF_CPU_THRESHOLD` | CPU 告警阈值（%） |
 | `PERF_MEM_THRESHOLD` | 内存告警阈值（MB） |
@@ -183,7 +195,11 @@ DEVICE_ID = 192.168.20.81:5555
 PACKAGE_NAME = com.aeke.fitnessmirror
 KEA2_RUNNING_MINUTES = 120
 TEST_ENGINE = kea2
+SCENARIOS = main
+OUTPUT_DIR = outputs
 ```
+
+配置好后可简化为：`python main.py`（参数仍可通过命令行覆盖）。
 
 ---
 

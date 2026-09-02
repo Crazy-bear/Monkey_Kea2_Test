@@ -17,10 +17,25 @@ from core.utils import LogRotator
 _CRASH_ANCHOR_PATTERNS = [
     re.compile(r"FATAL EXCEPTION", re.IGNORECASE),
     re.compile(r"ANR in ", re.IGNORECASE),
-    # 避免匹配 app_process: / ExecuteForProcess: 等误报
-    re.compile(r"(?<![A-Za-z_])Process:\s+\S+", re.IGNORECASE),
+    # 排除 rkstack.process: / app_process: 等 tag 内 process:
+    re.compile(r"(?<![A-Za-z_.])Process:\s+\S+", re.IGNORECASE),
     re.compile(r"Fatal signal \d+", re.IGNORECASE),
     re.compile(r"libc\s*:\s*Fatal signal", re.IGNORECASE),
+]
+
+# Android logcat 行级别：MM-DD HH:MM:SS.mmm  PID  TID  LEVEL  TAG: msg
+_LOG_LEVEL_RE = re.compile(
+    r"^\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+\S+\s+\S+\s+([VDIWEF])\s+"
+)
+
+# 已知非崩溃噪声（GC、Fastbot 临时文件、系统 cgroup 等）
+_IGNORE_LINE_PATTERNS = [
+    re.compile(r"\bGC freed\b", re.IGNORECASE),
+    re.compile(r"mark compact GC", re.IGNORECASE),
+    re.compile(r"fastbot_.*\.fbm\.tmp", re.IGNORECASE),
+    re.compile(r"Failed to update quota type", re.IGNORECASE),
+    re.compile(r"SetCgroup::ExecuteForProcess:", re.IGNORECASE),
+    re.compile(r"System\.exit called,\s*status:\s*0", re.IGNORECASE),
 ]
 
 _EXCEPTION_CATEGORIES = [
@@ -43,6 +58,17 @@ def _line_matches_package(line, package_name):
     return package_name in line or short in line
 
 
+def _log_level(line):
+    """解析 logcat 行优先级字母（V/D/I/W/E/F），无法解析时返回 None。"""
+    match = _LOG_LEVEL_RE.match(line)
+    return match.group(1) if match else None
+
+
+def _should_ignore_line(line):
+    """过滤 GC、cgroup、Fastbot 临时文件等已知噪声。"""
+    return any(pattern.search(line) for pattern in _IGNORE_LINE_PATTERNS)
+
+
 def _classify_exception_line(line):
     """将异常行归类。"""
     if "ANR in" in line or re.search(r"\bANR\b", line):
@@ -53,6 +79,34 @@ def _classify_exception_line(line):
         if cat in line:
             return cat
     return "Other"
+
+
+def _classify_event_message(message):
+    """根据完整事件文本归类（堆栈行可能含具体异常类型）。"""
+    first_line = message.splitlines()[0]
+    category = _classify_exception_line(first_line)
+    if category != "Other":
+        return category
+    for cat in _EXCEPTION_CATEGORIES:
+        if cat == "ANR":
+            continue
+        if cat in message:
+            return cat
+    return "Other"
+
+
+def _is_android_runtime_crash_block(message):
+    """是否处于 AndroidRuntime 崩溃块内（FATAL / Process / 堆栈）。"""
+    if not message:
+        return False
+    first = message.splitlines()[0]
+    return "AndroidRuntime" in first and (
+        "FATAL EXCEPTION" in message or "Process:" in message
+    )
+
+
+def _append_to_current_event(current_event, line):
+    current_event["message"] += "\n" + line
 
 
 def extract_crash_events(lines, package_name=None):
@@ -75,11 +129,12 @@ def extract_crash_events(lines, package_name=None):
         nonlocal current_event
         if not current_event:
             return
-        sig = current_event["signature"]
+        category = _classify_event_message(current_event["message"])
+        sig = f"{category}:{current_event['message'][:300]}"
         if sig not in seen_signatures:
             seen_signatures.add(sig)
             events.append({
-                "category": current_event["category"],
+                "category": category,
                 "message": current_event["message"],
                 "signature": sig,
             })
@@ -87,16 +142,30 @@ def extract_crash_events(lines, package_name=None):
 
     for raw_line in lines:
         line = raw_line.strip()
-        if not line:
+        if not line or _should_ignore_line(line):
             continue
 
         is_anchor = any(p.search(line) for p in _CRASH_ANCHOR_PATTERNS)
         is_exception = any(cat in line for cat in _EXCEPTION_CATEGORIES if cat != "ANR")
         is_anr = "ANR in" in line
+        level = _log_level(line)
+        # 独立异常行须为 E/F；锚点事件（FATAL / Process / signal）不受此限
+        is_error_exception = is_exception and level in ("E", "F")
 
-        if is_anchor or is_anr or (is_exception and "Exception" in line):
+        if is_anchor or is_anr or is_error_exception:
             if package_name and not _line_matches_package(line, package_name):
                 if not is_anchor and not is_anr:
+                    if not (
+                        current_event
+                        and _is_android_runtime_crash_block(current_event["message"])
+                        and "AndroidRuntime" in line
+                    ):
+                        continue
+
+            # 同一 AndroidRuntime 崩溃块内：FATAL / Process / 异常行合并为一条
+            if current_event and _is_android_runtime_crash_block(current_event["message"]):
+                if "AndroidRuntime" in line or line.startswith("at ") or line.startswith("Caused by:"):
+                    _append_to_current_event(current_event, line)
                     continue
 
             flush_event()
@@ -106,9 +175,19 @@ def extract_crash_events(lines, package_name=None):
                 "message": line,
                 "signature": f"{category}:{line[:200]}",
             }
-        elif current_event and (line.startswith("at ") or line.startswith("Caused by:")):
-            current_event["message"] += "\n" + line
-            current_event["signature"] = f"{current_event['category']}:{current_event['message'][:300]}"
+        elif current_event and (
+            line.startswith("at ")
+            or line.startswith("Caused by:")
+            or (is_exception and level in ("E", "F"))
+        ):
+            _append_to_current_event(current_event, line)
+        elif current_event and _is_android_runtime_crash_block(current_event["message"]):
+            if "AndroidRuntime" in line or line.startswith("at ") or line.startswith("Caused by:"):
+                _append_to_current_event(current_event, line)
+        elif current_event and package_name and _line_matches_package(line, package_name):
+            # 堆栈后续行可能无 E/F 前缀，但含包名
+            if line.startswith(" ") or "at " in line:
+                _append_to_current_event(current_event, line)
 
     flush_event()
     return events

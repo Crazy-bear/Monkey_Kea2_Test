@@ -1,3 +1,6 @@
+# 本地设备配置（复制 config.ini.example 为 config.ini 后修改）
+/config.ini
+
 # 运行产物
 /outputs/
 /test_report_dir/

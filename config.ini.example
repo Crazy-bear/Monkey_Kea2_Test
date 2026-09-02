@@ -1,0 +1,31 @@
+# 力量镜稳定性测试本地配置（复制为 config.ini 后修改）
+# 优先级：命令行参数 > 环境变量 > 本文件 > settings/config.py 默认值
+#
+#   cp config.ini.example config.ini   # Linux / macOS
+#   copy config.ini.example config.ini # Windows
+
+[DEFAULT]
+# 测试引擎：kea2 | monkey
+TEST_ENGINE = kea2
+
+# 设备与应用（adb devices 中的 ID）
+DEVICE_ID = YOUR_DEVICE_ID
+PACKAGE_NAME = com.aeke.fitnessmirror
+
+# Kea2 运行时长（分钟）
+KEA2_RUNNING_MINUTES = 60
+
+# 场景：all | home | lifestyle | suixinlian,course 等（别名见 settings/config.py SCENARIO_ALIASES）
+SCENARIOS = all
+
+# 测试产出根目录（每次运行在 <OUTPUT_DIR>/<timestamp>/ 下）
+OUTPUT_DIR = outputs
+
+# --- 可选：Monkey 冒烟 ---
+# EVENT_COUNT = 5000
+
+# --- 可选：多设备 profile 示例 ---
+# [mirror_wifi]
+# DEVICE_ID = 192.168.20.81:5555
+# SCENARIOS = all
+# KEA2_RUNNING_MINUTES = 60

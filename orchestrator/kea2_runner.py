@@ -58,14 +58,26 @@ def build_kea2_command(config, kea2_output_dir):
     return cmd
 
 
+def _pattern_to_module(pattern):
+    """test_home.py -> scenarios.test_home（供 unittest 按模块加载）。"""
+    name = os.path.basename(pattern)
+    if name.endswith(".py"):
+        name = name[:-3]
+    return f"scenarios.{name}"
+
+
 def build_discover_args(config):
-    """propertytest discover 子命令参数（作为 kea2 run 的 trailing extra）。"""
+    """propertytest 子命令参数（作为 kea2 run 的 trailing extra）。
+
+    unittest discover 多次 ``-p`` 时 argparse 只保留最后一个，导致仅末位脚本被 Load property。
+    多场景时用 ``scenarios.test_xxx`` 模块列表；单场景或 ``test_*.py`` 仍走 discover。
+    """
     scenarios_dir = config.get_scenarios_dir()
     patterns = config.get_scenario_patterns()
-    args = ["propertytest", "discover", "-s", scenarios_dir]
-    for pat in patterns:
-        args.extend(["-p", pat])
-    return args
+    if len(patterns) == 1:
+        return ["propertytest", "discover", "-s", scenarios_dir, "-p", patterns[0]]
+    modules = [_pattern_to_module(p) for p in patterns]
+    return ["propertytest", *modules]
 
 
 def validate_kea2_preflight(config):
@@ -92,27 +104,32 @@ def validate_kea2_preflight(config):
         return False, f"未找到场景脚本: {patterns}"
 
     env = build_kea2_subprocess_env(project_root)
-    probe = os.path.join(scenarios_dir, os.path.basename(scripts[0]))
-    proc = subprocess.run(
-        [
-            sys.executable, "-c",
-            "import importlib.util, sys, os; "
-            "root=os.environ.get('PYTHONPATH','').split(os.pathsep)[0]; "
-            "scenarios=sys.argv[1]; path=sys.argv[2]; "
-            "sys.path.insert(0, scenarios); "
-            "spec=importlib.util.spec_from_file_location('kea2_probe', path); "
-            "m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)",
-            scenarios_dir,
-            probe,
-        ],
-        cwd=project_root,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip()
-        return False, f"场景脚本 import 失败: {detail[:400]}"
+    if len(patterns) == 1:
+        probe_paths = [os.path.join(scenarios_dir, os.path.basename(scripts[0]))]
+    else:
+        probe_paths = scripts
+
+    for probe in probe_paths:
+        proc = subprocess.run(
+            [
+                sys.executable, "-c",
+                "import importlib.util, sys, os; "
+                "root=os.environ.get('PYTHONPATH','').split(os.pathsep)[0]; "
+                "scenarios=sys.argv[1]; path=sys.argv[2]; "
+                "sys.path.insert(0, root); "
+                "spec=importlib.util.spec_from_file_location('kea2_probe', path); "
+                "m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)",
+                scenarios_dir,
+                probe,
+            ],
+            cwd=project_root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or "").strip()
+            return False, f"场景脚本 import 失败 ({os.path.basename(probe)}): {detail[:400]}"
 
     try:
         from core.adb_client import ADBClient
