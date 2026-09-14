@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-数据中心详情页 Page Object（AEKE 力量镜 v3.x）。
+数据中心详情页 Page Object（S1Pro 力量镜 v3.x）。
 
-定位依据：S1Pro_UI/v3.0.0.6858/elements/DataCenterDetail_elements.md
+定位依据：S1Pro_UI/v3.1.0.7123/elements/DataCenterDetail_elements.md
 Activity：com.aeke.fitnessmirror.activity.TrainingDataCentreActivity
 """
 from pages.base_page import BasePage
@@ -36,6 +36,12 @@ class DataCenterDetailPage(BasePage):
     TAB_CALORIES = f"{PACKAGE}:id/tv_progress_calories"
     WEEK_CHART = f"{PACKAGE}:id/wrbv_week_data"
 
+    # v3.1 新增：Muscle Status
+    MUSCLE_STATUS_PANEL = f"{PACKAGE}:id/ctl_muscle_status"
+    MUSCLE_STATUS_TITLE = f"{PACKAGE}:id/tv_muscle_status_title"
+    MUSCLE_STATUS_VIEW = f"{PACKAGE}:id/muscle_status_view"
+    MUSCLE_STATUS_INFO = f"{PACKAGE}:id/iv_muscle_status_info"
+
     PREFERENCES_PANEL = f"{PACKAGE}:id/ctl_workout_preferences"
     PREFERENCES_TITLE = f"{PACKAGE}:id/tv_preferences_title"
     TRAINING_LIST = f"{PACKAGE}:id/ll_training_list"
@@ -43,6 +49,7 @@ class DataCenterDetailPage(BasePage):
     TITLE_TEXT = "Data Center"
     PROGRESS_TEXT = "Progress"
     PREFERENCES_TEXT = "Preferences"
+    MUSCLE_STATUS_TEXT = "Muscle Status"
     THIS_WEEK_TEXT = "This week"
 
     SUMMARY_LOCATORS = (
@@ -52,7 +59,13 @@ class DataCenterDetailPage(BasePage):
         KCAL_VALUE,
     )
 
-    _DETAIL_ANCHORS = (BACK_BUTTON, TOTAL_SUMMARY, PROGRESS_PANEL, PREFERENCES_PANEL)
+    _DETAIL_ANCHORS = (
+        BACK_BUTTON,
+        TOTAL_SUMMARY,
+        PROGRESS_PANEL,
+        MUSCLE_STATUS_PANEL,
+        PREFERENCES_PANEL,
+    )
 
     def is_data_center_detail_displayed(self):
         hits = sum(1 for loc in self._DETAIL_ANCHORS if self.is_displayed(loc))
@@ -80,12 +93,22 @@ class DataCenterDetailPage(BasePage):
             and self.is_displayed(self.WEEK_CHART)
         )
 
-    def preferences_section_visible(self):
-        return (
-            self.is_displayed(self.PREFERENCES_PANEL)
-            and self.device(text=self.PREFERENCES_TEXT).exists
-            and self.is_displayed(self.TRAINING_LIST)
+    def muscle_status_section_visible(self):
+        if self.is_displayed(self.MUSCLE_STATUS_PANEL) and self.is_displayed(
+            self.MUSCLE_STATUS_VIEW
+        ):
+            return True
+        return self.device(text=self.MUSCLE_STATUS_TEXT).exists and self.is_displayed(
+            self.MUSCLE_STATUS_PANEL
         )
+
+    def preferences_section_visible(self):
+        """Preferences 常在屏底，列表可能需滚动；以面板+标题为准。"""
+        if self.is_displayed(self.PREFERENCES_PANEL) and self.device(
+            text=self.PREFERENCES_TEXT
+        ).exists:
+            return True
+        return self.is_displayed(self.PREFERENCES_TITLE)
 
     def press_back(self):
         if self.is_displayed(self.BACK_BUTTON):

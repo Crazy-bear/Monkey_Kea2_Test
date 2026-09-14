@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Free Workout 页 Page Object（AEKE 力量镜 v3.x）。
+Free Workout 页 Page Object（S1Pro 力量镜 v3.x）。
 
 定位依据：S1Pro_UI/v3.0.0.6858/elements/FreeWorkout_elements.md
 """

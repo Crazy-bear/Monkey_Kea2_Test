@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Home Tab Page Object（AEKE 力量镜 v3.x）。
+Home Tab Page Object（S1Pro 力量镜 v3.x）。
 
-定位依据：S1Pro_UI/v3.0.0.6858/elements/Home_elements.md
+定位依据：S1Pro_UI/v3.1.0.7123/elements/Home_elements.md
+（兼容旧版 v3.0.0.6858；提醒条态已弱化，默认展示 Today's Effort）
 """
 from pages.main_activity_page import MainActivityPage
 
@@ -18,6 +19,11 @@ class HomePage(MainActivityPage):
     CALENDAR_MORE = "com.aeke.fitnessmirror:id/iv_more"
     WEEK_CALENDAR = "com.aeke.fitnessmirror:id/tl_days"
     BANNER_AREA = "com.aeke.fitnessmirror:id/hsb_week"
+
+    # Today's Effort 数据条（进入 Data Center）
+    EFFORT_STRIP = "com.aeke.fitnessmirror:id/hsr_tips"
+    EFFORT_ENTRY = "com.aeke.fitnessmirror:id/ll_report"
+    EFFORT_INFOS = "com.aeke.fitnessmirror:id/ctl_report_infos"
 
     _HOME_ANCHORS = (
         MainActivityPage.MAIN_TITLE_BAR,
@@ -57,3 +63,12 @@ class HomePage(MainActivityPage):
     def go_to_calendar_more(self):
         self.switch_to_home_tab()
         self.click(self.CALENDAR_MORE)
+
+    def go_to_data_center(self):
+        """点击 Today's Effort 条进入数据中心详情。"""
+        self.ensure_home_surface()
+        if self.is_displayed(self.EFFORT_ENTRY):
+            self.click(self.EFFORT_ENTRY)
+            self.device.sleep(0.8)
+            return True
+        return False

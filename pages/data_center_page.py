@@ -2,8 +2,8 @@
 """
 数据中心（Today's Effort）Page Object — Home 页运动数据条。
 
-定位依据：S1Pro_UI/v3.0.0.6858/elements/Home_NoReminder_elements.md
-提醒条态见 Home_elements.md（ll_reminder / tv_msg）。
+定位依据：S1Pro_UI/v3.1.0.7123/elements/Home_elements.md
+旧版提醒条态（ll_reminder / tv_msg）保留兼容，当前版本默认即为 Effort 条。
 """
 from pages.main_activity_page import MainActivityPage
 
@@ -24,6 +24,7 @@ class DataCenterPage(MainActivityPage):
     WEIGHT_VALUE = f"{PACKAGE}:id/tv_weight"
     WEIGHT_UNIT = f"{PACKAGE}:id/tv_weight_unit"
 
+    # 旧版提醒条（v3.0 可能出现；v3.1 默认已切到 Effort）
     REMINDER_CONTAINER = f"{PACKAGE}:id/ll_reminder"
     REMINDER_MSG = f"{PACKAGE}:id/tv_msg"
     REMINDER_START = {"type": "text", "value": "Start"}
@@ -51,17 +52,20 @@ class DataCenterPage(MainActivityPage):
         return self.text_exists(self.LABEL_TEXT)
 
     def is_effort_strip_visible(self):
-        if not self.text_exists(self.LABEL_TEXT):
+        if self.is_effort_label_visible() and self.is_displayed(self.REPORT_ENTRY):
+            return True
+        if not self.is_effort_label_visible():
             return False
         hits = sum(1 for loc in self._EFFORT_ANCHORS if self.is_displayed(loc))
         return hits >= 2
 
     def ensure_effort_strip(self, max_panel_dismiss=3):
-        """关闭提醒条/控制栏遮罩，确保处于 Today's Effort 数据条态。"""
+        """关闭控制栏/旧提醒条遮罩，确保 Today's Effort 数据条可见。"""
         self._dismiss_overlays(max_panel_dismiss)
         self.switch_to_home_tab()
-        self.dismiss_reminder_banner()
-        self.device.sleep(0.3)
+        if self.is_reminder_strip_visible():
+            self.dismiss_reminder_banner()
+            self.device.sleep(0.3)
         return self.is_effort_strip_visible()
 
     def effort_stats_visible(self):

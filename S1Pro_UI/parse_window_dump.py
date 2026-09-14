@@ -150,7 +150,12 @@ PAGE_FEATURE_RULES = {
     "Login": [
         ("登录 · 标题", ["family_login_title", "Tap Avatar to Log In"]),
         ("登录 · 成员列表", ["family_mode_ll", "rv_member", "icon_iv", "nane_tv", "tag_administrator", "Admin", "Join"]),
+        ("登录 · 离线模式", ["ll_offlineMode", "tv_offlineMode", "iv_offlineMode_question", "Offline Mode"]),
         ("登录 · 品牌区", ["slogan_iv", "slogan_tv", "Strength in Numbers"]),
+    ],
+    "Screensaver": [
+        ("屏保 · 壁纸", ["screen_image", "rl_control_root", "linearLayout"]),
+        ("屏保 · 时钟", ["time_hour", "time_minute", "chinese_data_info"]),
     ],
     "Settings": [
         ("顶栏 / 导航", ["nav", "ivLeftIcon", "tvTitle", "Settings", "titleScrollView"]),

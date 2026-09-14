@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-悬浮 Touch Page Object（AEKE 力量镜 v3.x）。
+悬浮 Touch Page Object（S1Pro 力量镜 v3.x）。
 
 定位依据：
 - S1Pro_UI/v3.0.0.6858/elements/FloatingTouch_elements.md（收起态）

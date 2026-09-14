@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Settings 列表与子页 Page Object（AEKE 力量镜 v3.x）。
+Settings 列表与子页 Page Object（S1Pro 力量镜 v3.x）。
 
 定位依据：S1Pro_UI/v3.0.0.6858/elements/Settings*_elements.md
 """
@@ -50,6 +50,9 @@ class SettingsPage(BasePage):
     ENTRY_AI_CORRECTION = "AI Correction Level"
     ENTRY_RESET_DEVICE = "Reset Device"
 
+    # 仅展示、不可进入（当前版本 Region 右侧为地区文案，无下级页）
+    DISPLAY_ONLY_ENTRIES = frozenset({ENTRY_REGION})
+
     # 稳定性测试禁止点击（会清除本地数据）
     BLOCKED_ENTRIES = frozenset({ENTRY_RESET_DEVICE})
 
@@ -79,7 +82,7 @@ class SettingsPage(BasePage):
         return False
 
     def go_to_entry(self, label):
-        if label in self.BLOCKED_ENTRIES:
+        if label in self.BLOCKED_ENTRIES or label in self.DISPLAY_ONLY_ENTRIES:
             return False
         node = self.device(text=label)
         if _element_exists(node, timeout=3):
