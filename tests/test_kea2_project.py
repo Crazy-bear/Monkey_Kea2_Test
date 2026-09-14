@@ -6,6 +6,22 @@ import tempfile
 
 
 class TestKea2ProjectPatch:
+    def test_inject_fastbot_tmpdir_adds_env_and_java_prop(self):
+        from orchestrator.kea2_project import FASTBOT_JAVA_TMPDIR, inject_fastbot_tmpdir
+
+        cmd = [
+            "CLASSPATH=/sdcard/monkeyq.jar",
+            "exec",
+            "app_process",
+            "/system/bin",
+            "com.android.commands.monkey.Monkey",
+        ]
+        out = inject_fastbot_tmpdir(cmd)
+        assert out[0] == f"TMPDIR={FASTBOT_JAVA_TMPDIR}"
+        assert out[out.index("app_process") + 1] == f"-Djava.io.tmpdir={FASTBOT_JAVA_TMPDIR}"
+        assert inject_fastbot_tmpdir(out)[0] == f"TMPDIR={FASTBOT_JAVA_TMPDIR}"
+        assert out.count(f"-Djava.io.tmpdir={FASTBOT_JAVA_TMPDIR}") == 1
+
     def test_patch_creates_pycache_in_configs(self):
         from orchestrator.kea2_project import _patch_kea2_config_sync_bug
 

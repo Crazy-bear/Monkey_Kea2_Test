@@ -4,6 +4,8 @@
 import os
 from unittest.mock import MagicMock
 
+import pytest
+
 
 class TestBasePage:
     def test_click_resource_id_string(self):
@@ -37,13 +39,7 @@ class TestHomePage:
     def test_locators_match_home_dump(self):
         from pages.home_page import HomePage
 
-        dump_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "S1Pro_UI",
-            "v3.0.0.6858",
-            "window_dump",
-            "Home_window_dump.xml",
-        )
+        dump_path = _dump_path("Home_window_dump.xml")
         if not os.path.isfile(dump_path):
             return
         xml = open(dump_path, encoding="utf-8").read()
@@ -54,6 +50,8 @@ class TestHomePage:
             HomePage.PLAN_BUTTON,
             HomePage.ASSESSMENT_BUTTON,
             HomePage.PROFILE_BUTTON,
+            HomePage.EFFORT_ENTRY,
+            HomePage.EFFORT_INFOS,
         ):
             assert rid in xml, f"Home dump 缺少 {rid}"
 
@@ -74,16 +72,21 @@ class TestHomePage:
 
 
 class TestLifestylePage:
+    def _lifestyle_dump_dir(self):
+        root = os.path.dirname(os.path.dirname(__file__))
+        for ver in ("v3.1.0.7123", "v3.0.0.6858"):
+            path = os.path.join(root, "S1Pro_UI", ver, "window_dump")
+            if os.path.isdir(path):
+                return path
+        return None
+
     def test_lifestyle_locators_match_dump(self):
         from pages.lifestyle_page import LifestylePage
 
-        dump_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "S1Pro_UI",
-            "v3.0.0.6858",
-            "window_dump",
-            "Lifestyle_window_dump.xml",
-        )
+        dump_dir = self._lifestyle_dump_dir()
+        if not dump_dir:
+            return
+        dump_path = os.path.join(dump_dir, "Lifestyle_window_dump.xml")
         if not os.path.isfile(dump_path):
             return
         xml = open(dump_path, encoding="utf-8").read()
@@ -91,6 +94,36 @@ class TestLifestylePage:
             assert rid in xml, f"Lifestyle dump 缺少 {rid}"
         for label in LifestylePage.ENTRY_LABELS:
             assert label in xml, f"Lifestyle dump 缺少文案 {label}"
+
+    def test_lifestyle_subpage_locators_match_dump(self):
+        from pages.lifestyle_page import (
+            LifestyleGamesPage,
+            LifestyleVSModePage,
+            LifestyleSpeakerPage,
+            LifestyleScreenCastPage,
+            LifestyleWallpaperPage,
+        )
+
+        dump_dir = self._lifestyle_dump_dir()
+        if not dump_dir:
+            return
+
+        cases = (
+            ("Lifestyle_Games_window_dump.xml", (LifestyleGamesPage.HOME_BUTTON, LifestyleGamesPage.GAME_LIST)),
+            ("Lifestyle_VSMode_window_dump.xml", (LifestyleVSModePage.START_PK, LifestyleVSModePage.TITLE)),
+            ("Lifestyle_Speaker_window_dump.xml", (LifestyleSpeakerPage.BTN_QUIT, LifestyleSpeakerPage.BTN_ALLOW)),
+            ("Lifestyle_Speaker_Main_window_dump.xml", (LifestyleSpeakerPage.CLOSE_BUTTON, LifestyleSpeakerPage.DEVICE_NAME)),
+            ("Lifestyle_ScreenCast_window_dump.xml", (LifestyleScreenCastPage.CLOSE_BUTTON, LifestyleScreenCastPage.DEVICE_NAME)),
+            ("Lifestyle_Wallpaper_window_dump.xml", (LifestyleWallpaperPage.CLOSE_BUTTON, LifestyleWallpaperPage.TITLE)),
+        )
+        for filename, rids in cases:
+            path = os.path.join(dump_dir, filename)
+            if not os.path.isfile(path):
+                continue
+            xml = open(path, encoding="utf-8").read()
+            for rid in rids:
+                short = rid.split("/")[-1]
+                assert short in xml, f"{filename} 缺少 {rid}"
 
     def test_is_lifestyle_page_requires_entries(self):
         from pages.lifestyle_page import LifestylePage
@@ -112,6 +145,37 @@ class TestLifestylePage:
 
         device.side_effect = side_effect
         assert page.is_lifestyle_page_displayed() is True
+
+    def test_has_any_entry_accepts_chinese_alias(self):
+        from pages.lifestyle_page import LifestylePage
+
+        device = MagicMock()
+        page = LifestylePage(device)
+
+        def side_effect(**kwargs):
+            m = MagicMock()
+            m.exists = kwargs.get("text") == "游戏"
+            return m
+
+        device.side_effect = side_effect
+        assert page.has_any_entry() is True
+
+    def test_games_page_detection(self):
+        from pages.lifestyle_page import LifestyleGamesPage
+
+        device = MagicMock()
+        page = LifestyleGamesPage(device)
+
+        def side_effect(**kwargs):
+            m = MagicMock()
+            m.exists = kwargs.get("resourceId") in (
+                LifestyleGamesPage.HOME_BUTTON,
+                LifestyleGamesPage.GAME_LIST,
+            )
+            return m
+
+        device.side_effect = side_effect
+        assert page.is_games_page_displayed() is True
 
 
 class TestMainActivityPage:
@@ -161,14 +225,101 @@ class TestMainActivityPage:
         page.click.assert_called()
 
 
+class TestLoginPage:
+    def test_locators_match_login_dump(self):
+        from pages.login_page import LoginPage
+
+        _assert_ids_in_dump(
+            "Login_window_dump.xml",
+            (
+                LoginPage.TITLE,
+                LoginPage.MEMBER_LIST,
+                LoginPage.TAG_ADMIN,
+                LoginPage.OFFLINE_MODE,
+            ),
+        )
+
+    def test_is_login_page_requires_anchors(self):
+        from pages.login_page import LoginPage
+
+        device = MagicMock()
+
+        def side_effect(**kwargs):
+            m = MagicMock()
+            rid = kwargs.get("resourceId")
+            text = kwargs.get("text")
+            m.exists = rid in (LoginPage.TITLE, LoginPage.MEMBER_LIST) or text == LoginPage.TITLE_TEXT
+            return m
+
+        device.side_effect = side_effect
+        assert LoginPage(device).is_login_page_displayed() is True
+
+    def test_login_as_admin_noop_on_static(self):
+        from pages.login_page import LoginPage
+
+        device = MagicMock()
+        device.__class__.__name__ = "U2StaticDevice"
+        page = LoginPage(device)
+        # 无真实 Admin 节点时直接失败；静态设备不应抛错
+        assert page.login_as_admin() is False
+
+
+class TestScreensaverPage:
+    def test_locators_match_screensaver_dump(self):
+        from pages.screensaver_page import ScreensaverPage
+
+        _assert_ids_in_dump(
+            "Screensaver_window_dump.xml",
+            (
+                ScreensaverPage.SCREEN_IMAGE,
+                ScreensaverPage.TIME_HOUR,
+                ScreensaverPage.TIME_MINUTE,
+            ),
+        )
+
+    def test_is_screensaver_requires_two_anchors(self):
+        from pages.screensaver_page import ScreensaverPage
+
+        device = MagicMock()
+
+        def side_effect(**kwargs):
+            m = MagicMock()
+            rid = kwargs.get("resourceId")
+            m.exists = rid in (ScreensaverPage.SCREEN_IMAGE, ScreensaverPage.TIME_HOUR)
+            return m
+
+        device.side_effect = side_effect
+        assert ScreensaverPage(device).is_screensaver_displayed() is True
+
+
 def _dump_path(name):
-    return os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "S1Pro_UI",
-        "v3.0.0.6858",
-        "window_dump",
-        name,
-    )
+    root = os.path.dirname(os.path.dirname(__file__))
+    for ver in ("v3.1.0.7123", "v3.0.0.6858"):
+        path = os.path.join(root, "S1Pro_UI", ver, "window_dump", name)
+        if os.path.isfile(path):
+            return path
+    return os.path.join(root, "S1Pro_UI", "v3.0.0.6858", "window_dump", name)
+
+
+def _read_dump(name):
+    path = _dump_path(name)
+    if not os.path.isfile(path):
+        pytest.skip(f"缺少 dump 文件：{path}")
+    return open(path, encoding="utf-8").read()
+
+
+def _static_checker_device(xml):
+    """
+    构造 Kea2 precondition 用的只读 StaticChecker 设备。
+
+    U2StaticChecker.__init__ 会 adbutils.device() + u2.connect() 连真机，
+    这里绕开它只保留 XML 解析部分，保证单测无设备可跑。
+    """
+    from kea2.u2Driver import U2StaticChecker, U2StaticDevice
+
+    checker = U2StaticChecker.__new__(U2StaticChecker)
+    checker.d = U2StaticDevice(script_driver=None)
+    return checker.getInstance(xml)
 
 
 def _assert_ids_in_dump(dump_file, ids):
@@ -177,7 +328,7 @@ def _assert_ids_in_dump(dump_file, ids):
         return
     xml = open(dump_path, encoding="utf-8").read()
     for rid in ids:
-        assert rid in xml, f"{dump_file} 缺少 {rid}"
+        assert rid in xml, f"{dump_file} 缺少 {rid} (checked {dump_path})"
 
 
 class TestSubPagesDumpAlignment:
@@ -206,11 +357,12 @@ class TestSubPagesDumpAlignment:
         ("ControlPanelPage", "Home_ControlPanel_window_dump.xml", "pages.control_panel_page", "ControlPanelPage", (
             "SYS_BRIGHT", "SYS_VOICE", "SYS_BLE", "SYS_WIFI", "SYS_LED",
         )),
-        ("DataCenterPage", "Home_NoReminder_window_dump.xml", "pages.data_center_page", "DataCenterPage", (
+        ("DataCenterPage", "Home_window_dump.xml", "pages.data_center_page", "DataCenterPage", (
             "STRIP_ROOT", "REPORT_ENTRY", "REPORT_INFOS", "TIME_VALUE", "KCAL_VALUE", "WEIGHT_VALUE",
         )),
         ("DataCenterDetailPage", "DataCenterDetail_window_dump.xml", "pages.data_center_detail_page", "DataCenterDetailPage", (
             "BACK_BUTTON", "TOTAL_SUMMARY", "PROGRESS_PANEL", "PREFERENCES_PANEL", "WEEK_CHART",
+            "MUSCLE_STATUS_PANEL", "MUSCLE_STATUS_TITLE", "MUSCLE_STATUS_VIEW",
         )),
         ("FloatingTouchPage", "FloatingTouch_window_dump.xml", "pages.floating_touch_page", "FloatingTouchPage", (
             "FAB_ROOT", "FAB_CONTRACT", "FAB_ICON",
@@ -256,7 +408,7 @@ class TestDataCenterDetailPage:
                 DataCenterDetailPage.BACK_BUTTON,
                 DataCenterDetailPage.TOTAL_SUMMARY,
                 DataCenterDetailPage.PROGRESS_PANEL,
-                DataCenterDetailPage.PREFERENCES_PANEL,
+                DataCenterDetailPage.MUSCLE_STATUS_PANEL,
             ):
                 m.exists = True
             elif text == DataCenterDetailPage.TITLE_TEXT:
@@ -268,24 +420,36 @@ class TestDataCenterDetailPage:
         device.side_effect = side_effect
         assert page.is_data_center_detail_displayed() is True
 
+    def test_muscle_status_section_visible(self):
+        from pages.data_center_detail_page import DataCenterDetailPage
+
+        device = MagicMock()
+        page = DataCenterDetailPage(device)
+
+        def side_effect(**kwargs):
+            m = MagicMock()
+            rid = kwargs.get("resourceId")
+            text = kwargs.get("text")
+            if rid in (
+                DataCenterDetailPage.MUSCLE_STATUS_PANEL,
+                DataCenterDetailPage.MUSCLE_STATUS_VIEW,
+            ):
+                m.exists = True
+            elif text == DataCenterDetailPage.MUSCLE_STATUS_TEXT:
+                m.exists = True
+            else:
+                m.exists = False
+            return m
+
+        device.side_effect = side_effect
+        assert page.muscle_status_section_visible() is True
+
 
 class TestStaticCheckerCompat:
     def test_dismiss_reminder_no_click_on_static_checker(self):
-        from kea2.u2Driver import U2StaticChecker
         from pages.main_activity_page import MainActivityPage
 
-        dump_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "S1Pro_UI",
-            "v3.0.0.6858",
-            "window_dump",
-            "Home_window_dump.xml",
-        )
-        if not os.path.isfile(dump_path):
-            return
-
-        xml = open(dump_path, encoding="utf-8").read()
-        device = U2StaticChecker().getInstance(xml)
+        device = _static_checker_device(_read_dump("Home_window_dump.xml"))
         page = MainActivityPage(device)
 
         # Home dump 含提醒条关闭按钮；StaticChecker 下 click 应为 no-op，不得抛 TypeError
@@ -293,20 +457,21 @@ class TestStaticCheckerCompat:
         assert page.click(page.REMINDER_CLOSE) is False
 
     def test_on_home_page_precondition_read_only(self):
-        from kea2.u2Driver import U2StaticChecker
         from scenarios.base_property import FitnessMirrorPropertyTest
 
-        dump_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "S1Pro_UI",
-            "v3.0.0.6858",
-            "window_dump",
-            "Home_window_dump.xml",
-        )
-        if not os.path.isfile(dump_path):
-            return
-
-        xml = open(dump_path, encoding="utf-8").read()
         case = FitnessMirrorPropertyTest()
-        case.d = U2StaticChecker().getInstance(xml)
+        case.d = _static_checker_device(_read_dump("Home_window_dump.xml"))
         assert case.on_home_page() is True
+        assert case.needs_session_recovery() is False
+
+    def test_needs_session_recovery_on_login_dump(self):
+        from scenarios.base_property import FitnessMirrorPropertyTest
+
+        case = FitnessMirrorPropertyTest()
+        case.d = _static_checker_device(_read_dump("Login_window_dump.xml"))
+        assert case.needs_session_recovery() is True
+        assert case.on_home_page() is False
+        # 基类恢复属性应对 CourseTest 等子类可见，避免登录页 0 Checkable
+        from scenarios.test_course import CourseTest
+        assert hasattr(CourseTest, "test_recover_session")
+        assert hasattr(CourseTest, "needs_session_recovery")
