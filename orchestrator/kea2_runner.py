@@ -9,6 +9,7 @@ Kea2 CLI 注意点（踩坑汇总）：
 3. 子进程需 PYTHONPATH=项目根，否则 scenarios/pages 无法 import。
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,13 @@ from orchestrator.kea2_project import (
     ensure_kea2_project_ready,
     generate_kea2_native_report,
     build_kea2_subprocess_env,
+)
+from orchestrator.module_catalog import (
+    KEA2_DEVICE_AWL_PATH,
+    KEA2_LOCK_MODULES_ENV,
+    resolve_lock_modules_from_config,
+    whitelist_activities_for_modules,
+    write_awl_strings,
 )
 
 # Kea2 fastbotManager 推送本地 configs/abl.strings 到此设备路径
@@ -37,8 +45,12 @@ def _kea2_executable():
     return ["kea2"]
 
 
-def build_kea2_command(config, kea2_output_dir):
-    """构建 kea2 run 命令（不含 propertytest discover 部分）。"""
+def build_kea2_command(config, kea2_output_dir, lock_modules=None):
+    """构建 kea2 run 命令（不含 propertytest discover 部分）。
+
+    指定模块时写 awl.strings 并传白名单（与黑名单互斥）；
+    all 时传现有黑名单。
+    """
     cmd = [
         *_kea2_executable(),
         "run",
@@ -51,9 +63,20 @@ def build_kea2_command(config, kea2_output_dir):
     if config.KEA2_MAX_STEP:
         cmd.extend(["--max-step", str(config.KEA2_MAX_STEP)])
 
-    abl = os.path.join(config._project_root(), "configs", "abl.strings")
-    if os.path.isfile(abl) and os.path.getsize(abl) > 0:
-        cmd.extend(["--act-blacklist-file", KEA2_DEVICE_ABL_PATH])
+    project_root = config._project_root()
+    if lock_modules:
+        acts = whitelist_activities_for_modules(lock_modules)
+        write_awl_strings(project_root, acts)
+        cmd.extend(["--act-whitelist-file", KEA2_DEVICE_AWL_PATH])
+        logger.info(
+            "模块锁白名单 (%s): %d 个 Activity",
+            ",".join(lock_modules),
+            len(acts),
+        )
+    else:
+        abl = os.path.join(project_root, "configs", "abl.strings")
+        if os.path.isfile(abl) and os.path.getsize(abl) > 0:
+            cmd.extend(["--act-blacklist-file", KEA2_DEVICE_ABL_PATH])
 
     return cmd
 
@@ -137,6 +160,11 @@ def validate_kea2_preflight(config):
         devices = adb.get_connected_devices()
         if config.DEVICE_ID not in devices:
             return False, f"设备未连接: {config.DEVICE_ID}，当前: {devices or '无'}"
+        # Fastbot NanoHTTPD 需要可写 tmp；本机 ROM 没有 /tmp。
+        adb.run_command(
+            ["adb", "-s", config.DEVICE_ID, "shell", "mkdir", "-p", "/data/local/tmp"],
+            capture_output=True,
+        )
     except Exception as e:
         return False, f"ADB 检查失败: {e}"
 
@@ -166,6 +194,21 @@ def _parse_kea2_failure(combined, exit_code):
         )
     if "ModuleNotFoundError" in combined or "No module named 'scenarios'" in combined:
         return "场景 import 失败：缺少 PYTHONPATH=项目根。"
+    # Fastbot 崩溃后的清理也会带 AdbError，须先于通用 ADB 判断。
+    if (
+        "Fastbot Aborted" in combined
+        or "getTmpBucket" in combined
+        or "NanoHTTPD" in combined
+    ):
+        return (
+            "Fastbot 代理进程崩溃：NanoHTTPD 无法创建临时文件（设备没有可写 /tmp）。"
+            "已在 Kea2 启动命令中指定 java.io.tmpdir=/data/local/tmp，请重新跑测。"
+        )
+    if "Unable to connect to uiautomator2 server" in combined:
+        return (
+            "无法连接 uiautomator2。请执行 python -m uiautomator2 init，"
+            "并确认设备未休眠、ATX 仍在运行。"
+        )
     if "AdbError" in combined or "adbutils.errors.AdbError" in combined:
         return (
             "ADB push/pull 失败。若含 act-blacklist-file，"
@@ -173,11 +216,42 @@ def _parse_kea2_failure(combined, exit_code):
         )
     if "not initialized" in combined.lower():
         return "Kea2 项目未初始化，请在项目根执行 kea2 init"
+
+    # 属性失败：优先摘要，避免把 Traceback 首行当原因
+    m = re.search(
+        r"\[Property Execution Summary\]\s*Errors:\s*(\d+)\s*,\s*Fails:\s*(\d+)",
+        combined,
+    )
+    if m:
+        errors, fails = int(m.group(1)), int(m.group(2))
+        if fails or errors:
+            return f"属性执行失败：Fails={fails}, Errors={errors}"
+
+    assert_lines = [
+        ln.strip()
+        for ln in combined.splitlines()
+        if "AssertionError" in ln or "assert " in ln.lower()
+    ]
+    if assert_lines:
+        # 去重并截断
+        uniq = []
+        for ln in assert_lines:
+            if ln not in uniq:
+                uniq.append(ln)
+        return ("；".join(uniq[:3]))[:500]
+
     if exit_code != 0:
         for line in combined.splitlines():
-            if "Error" in line or "Traceback" in line or "ERROR" in line:
-                return line[:500]
-        return (combined.strip() or f"Kea2 退出码 {exit_code}")[:500]
+            text = line.strip()
+            if not text:
+                continue
+            if text.startswith("Traceback") or text.startswith("File \""):
+                continue
+            if "Error" in text or "ERROR" in text or "Failed" in text:
+                return text[:500]
+        from orchestrator.kea2_result_parser import format_kea2_exit_code
+
+        return f"Kea2 退出码 {format_kea2_exit_code(exit_code)}"
     return ""
 
 
@@ -197,12 +271,22 @@ def run_kea2(config, kea2_output_dir, cwd=None):
         logger.error(err)
         return 4, err
 
-    cmd = build_kea2_command(config, kea2_output_dir)
+    lock_modules = resolve_lock_modules_from_config(config)
+    if lock_modules:
+        from orchestrator.module_bootstrap import bootstrap_locked_module
+
+        bootstrap_locked_module(config.DEVICE_ID, lock_modules)
+
+    cmd = build_kea2_command(config, kea2_output_dir, lock_modules=lock_modules)
     cmd.extend(build_discover_args(config))
 
     logger.info(f"启动 Kea2: {' '.join(cmd)}")
 
     env = build_kea2_subprocess_env(project_root)
+    if lock_modules:
+        env[KEA2_LOCK_MODULES_ENV] = ",".join(lock_modules)
+    else:
+        env.pop(KEA2_LOCK_MODULES_ENV, None)
     log_path = os.path.join(os.path.dirname(kea2_output_dir), "kea2_subprocess.log")
     output_lines = []
 

@@ -10,6 +10,46 @@ from pathlib import Path
 
 from settings.logging_config import logger
 
+# 力量镜 ROM 没有 /tmp，且根分区只读；Fastbot NanoHTTPD 用 java.io.tmpdir 写 POST 临时文件。
+FASTBOT_JAVA_TMPDIR = "/data/local/tmp"
+
+
+def inject_fastbot_tmpdir(shell_command):
+    """给 Fastbot 的 adb shell 命令加上可写临时目录。"""
+    if not isinstance(shell_command, (list, tuple)):
+        return shell_command
+    cmd = [str(x) for x in shell_command]
+    if not any(item.startswith("TMPDIR=") for item in cmd):
+        cmd = [f"TMPDIR={FASTBOT_JAVA_TMPDIR}"] + cmd
+    prop = f"-Djava.io.tmpdir={FASTBOT_JAVA_TMPDIR}"
+    if "app_process" in cmd and prop not in cmd:
+        cmd.insert(cmd.index("app_process") + 1, prop)
+    return cmd
+
+
+def _wrap_stream_shell_call(cls):
+    orig = cls.__call__
+    if getattr(orig, "_kea2_tmpdir_patched", False):
+        return orig
+
+    def wrapped(self, cmdargs, *args, **kwargs):
+        return orig(self, inject_fastbot_tmpdir(cmdargs), *args, **kwargs)
+
+    wrapped._kea2_tmpdir_patched = True
+    cls.__call__ = wrapped
+    return wrapped
+
+
+def patch_fastbot_java_tmpdir():
+    """拦截 Fastbot adb shell，把临时目录指到 /data/local/tmp。
+
+    ADBDevice.stream_shell 是 property，不能给实例赋值；改为包装 StreamShell.__call__。
+    """
+    from kea2.adbUtils import ADBStreamShell_V1, ADBStreamShell_V2
+
+    _wrap_stream_shell_call(ADBStreamShell_V1)
+    _wrap_stream_shell_call(ADBStreamShell_V2)
+
 
 def build_kea2_subprocess_env(project_root=None):
     """

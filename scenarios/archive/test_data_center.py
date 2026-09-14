@@ -3,8 +3,7 @@
 数据中心（Today's Effort + Data Center 详情）场景稳定性属性测试 — v3.x UI。
 
 定位见 pages/data_center_page.py、pages/data_center_detail_page.py 与
-S1Pro_UI/v3.0.0.6858/elements/Home_NoReminder_elements.md、
-DataCenterDetail_elements.md。
+S1Pro_UI/v3.1.0.7123/elements/Home_elements.md、DataCenterDetail_elements.md。
 """
 from kea2 import precondition, prob, max_tries
 
@@ -27,7 +26,7 @@ class DataCenterTest(FitnessMirrorPropertyTest):
     def test_today_effort_strip_visible(self):
         self.set_perf_phase("data_center_strip")
         page = self.data_center_page()
-        assert page.ensure_effort_strip(), "Today's Effort 数据条不可见（请先关闭提醒条）"
+        assert page.ensure_effort_strip(), "Today's Effort 数据条不可见"
         assert page.is_effort_label_visible(), "Today's Effort 标题不可见"
         assert page.is_displayed(page.REPORT_INFOS), "运动数据区不可见"
 
@@ -64,6 +63,7 @@ class DataCenterTest(FitnessMirrorPropertyTest):
         self.set_perf_phase("data_center_sections")
         detail = self._enter_detail_from_home()
         assert detail.progress_section_visible(), "Progress 区块不可见"
+        assert detail.muscle_status_section_visible(), "Muscle Status 区块不可见"
         assert detail.preferences_section_visible(), "Preferences 区块不可见"
         assert self.press_back_to_home(), "数据中心返回 Home 失败"
 

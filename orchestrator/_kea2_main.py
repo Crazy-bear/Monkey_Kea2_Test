@@ -16,6 +16,10 @@ def _ensure_project_root_on_path():
 
 _ensure_project_root_on_path()
 
+from orchestrator.kea2_project import patch_fastbot_java_tmpdir
+
+patch_fastbot_java_tmpdir()
+
 from kea2.cli import main
 
 if __name__ == "__main__":
