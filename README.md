@@ -77,6 +77,7 @@ main.py
 ├── core/                   # ADB、Logcat、报告、Monkey
 ├── performance/            # 性能监控
 ├── templates/              # 可选 HTML 报告模板
+├── S1Pro_UI/               # 各版本 UI dump 与元素清单（定位基线）
 ├── tests/                  # 单元测试（pytest，无需设备）
 ├── docs/                   # 迭代记录、问题解决方案
 ├── outputs/                # 测试产出（gitignore）

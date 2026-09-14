@@ -70,7 +70,7 @@
 ### 建议目录结构
 
 ```
-S1Pro_UI/v3.0.0.6858/
+S1Pro_UI/v3.1.0.7123/
 ├── i18n/
 │   ├── baseline/          # en-US 基线
 │   │   └── window_dump/Home_window_dump.xml
@@ -81,7 +81,7 @@ S1Pro_UI/v3.0.0.6858/
 ├── i18n_catalog/          # 自动生成：rid → 各语言文案对照表
 │   └── Home_strings.json
 └── reports/
-    └── i18n_report_v3.0.0.6858.html
+    └── i18n_report_v3.1.0.7123.html
 ```
 
 ---
@@ -264,7 +264,7 @@ ar         ⚠️(2)  ✅      ✅
 - [ ] dump Language 设置页 UI，建立语言切换自动化路径
 - [ ] 确认 App 切换语言后是否需要重启（及等待时长）
 - [ ] 确定 baseline 语言（建议 en-US）
-- [ ] 确认 P0/P1 页面清单与现有 `S1Pro_UI/v3.0.0.6858/window_dump/` 对齐
+- [ ] 确认 P0/P1 页面清单与现有 `S1Pro_UI/v3.1.0.7123/window_dump/` 对齐
 - [ ] 评审 `I18N_WHITELIST` 与 `DYNAMIC_RIDS` 初版列表
 
 ---
@@ -275,6 +275,6 @@ ar         ⚠️(2)  ✅      ✅
 |------|------|
 | `S1Pro_UI/dump_page_ui.py` | 现有 UI dump 入口（待扩展 `--locale`） |
 | `S1Pro_UI/parse_window_dump.py` | XML → Markdown 解析（可复用 `parse_dump`） |
-| `S1Pro_UI/v3.0.0.6858/window_dump/` | 当前英文 baseline dump |
+| `S1Pro_UI/v3.1.0.7123/window_dump/` | 当前英文 baseline dump |
 | `pages/` | Page Object，导航复用 resource-id |
 | `scenarios/` | 场景脚本，可参考页面跳转路径 |
