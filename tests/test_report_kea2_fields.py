@@ -29,7 +29,7 @@ class TestReportKea2Fields:
             "log_analysis": {},
             "performance_data": [{"timestamp": "t", "cpu": 10, "mem": 100, "fps": 60, "phase": "main"}],
             "performance_summary": {},
-            "performance_thresholds": {"cpu": 80, "mem": 512, "fps": 30},
+            "performance_thresholds": {"cpu": 80, "mem": 550, "fps": 30},
             "memory_leak_analysis": {},
             "kea2": {
                 "exit_code": 0,

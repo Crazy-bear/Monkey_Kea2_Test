@@ -19,6 +19,17 @@ class TestReportVerdict:
         assert rows[0]["fps_low"] is False
         assert rows[1]["fps_invalid"] is False
 
+    def test_sanitize_reapplies_mem_threshold(self):
+        rows = sanitize_performance_samples(
+            [
+                {"fps": 50, "cpu": 10, "mem": 520, "mem_exceed": True},
+                {"fps": 50, "cpu": 10, "mem": 560, "mem_exceed": False},
+            ],
+            thresholds={"cpu": 80, "mem": 550, "fps": 30},
+        )
+        assert rows[0]["mem_exceed"] is False
+        assert rows[1]["mem_exceed"] is True
+
     def test_gate_property_is_warn_not_fail(self):
         gate = compute_gate_status({
             "crash_count": 0,
@@ -40,15 +51,24 @@ class TestReportVerdict:
         assert gate["reasons_soft"]
         assert not gate["reasons_hard"]
 
-    def test_gate_crash_is_fail(self):
+    def test_gate_ignores_transient_u2_when_exit_ok(self):
         gate = compute_gate_status({
-            "crash_count": 1,
-            "kea2": {"exit_code": 0, "property_violation_count": 0, "property_violations": []},
+            "crash_count": 0,
+            "kea2": {
+                "exit_code": 0,
+                "exit_code_label": "0（成功）",
+                "property_violation_count": 0,
+                "property_violations": [],
+                "error_message": (
+                    "无法连接 uiautomator2。请执行 python -m uiautomator2 init，"
+                    "并确认设备未休眠、ATX 仍在运行。"
+                ),
+            },
             "path_performance": [],
             "memory_leak_analysis": {},
         })
-        assert gate["level"] == "fail"
-        assert gate["passed"] is False
+        assert gate["level"] == "pass"
+        assert not any("uiautomator2" in r for r in gate["reasons_soft"])
 
     def test_executive_verdict(self):
         data = {

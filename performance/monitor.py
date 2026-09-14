@@ -64,7 +64,7 @@ class PerformanceMonitor:
 
         cfg = config
         self.cpu_threshold = getattr(cfg, "PERF_CPU_THRESHOLD", 80.0) if cfg else 80.0
-        self.mem_threshold = getattr(cfg, "PERF_MEM_THRESHOLD", 512.0) if cfg else 512.0
+        self.mem_threshold = getattr(cfg, "PERF_MEM_THRESHOLD", 550.0) if cfg else 550.0
         self.fps_threshold = getattr(cfg, "PERF_FPS_THRESHOLD", 30.0) if cfg else 30.0
         self.mem_leak_window = getattr(cfg, "PERF_MEM_LEAK_WINDOW", 10) if cfg else 10
         self.mem_leak_growth = getattr(cfg, "PERF_MEM_LEAK_GROWTH", 20.0) if cfg else 20.0

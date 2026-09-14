@@ -488,7 +488,13 @@ def build_report_data(
         "performance_data": performance_data,
         "performance_summary": performance_summary,
         "performance_thresholds": performance_monitor.get_thresholds() if performance_monitor else (
-            (performance_summary or {}).get("thresholds") or {}
+            {
+                "cpu": float(getattr(config, "PERF_CPU_THRESHOLD", 80.0)),
+                "mem": float(getattr(config, "PERF_MEM_THRESHOLD", 550.0)),
+                "fps": float(getattr(config, "PERF_FPS_THRESHOLD", 30.0)),
+            }
+            if config is not None
+            else ((performance_summary or {}).get("thresholds") or {})
         ),
         "memory_leak_analysis": (
             performance_monitor.get_leak_analysis()

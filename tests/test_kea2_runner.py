@@ -134,3 +134,16 @@ class TestKea2Runner:
 
         msg = _parse_kea2_failure("adbutils.errors.AdbError: FAIL", 4)
         assert "act-blacklist-file" in msg
+
+    def test_parse_kea2_failure_ignores_transient_u2_when_recovered(self):
+        from orchestrator.kea2_runner import _parse_kea2_failure
+
+        log = (
+            "HTTPError: Unable to connect to uiautomator2 server: closed\n"
+            "Connected to fastbot server.\n"
+            "// Monkey finished\n"
+        )
+        assert _parse_kea2_failure(log, 0) == ""
+        assert "uiautomator2" in _parse_kea2_failure(
+            "Unable to connect to uiautomator2 server: closed\n", 4
+        )

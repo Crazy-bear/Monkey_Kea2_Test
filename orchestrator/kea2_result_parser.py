@@ -308,8 +308,8 @@ def summarize_property_violations(violations, limit=5):
     return head + "（" + "；".join(lines) + more + "）"
 
 
-def is_noisy_kea2_error(message):
-    """堆栈首行等无信息文案，不宜直接展示为门禁原因。"""
+def is_noisy_kea2_error(message, exit_code=None):
+    """堆栈首行、瞬时设备噪声等，不宜直接展示为门禁原因。"""
     if not message:
         return True
     text = str(message).strip()
@@ -324,12 +324,18 @@ def is_noisy_kea2_error(message):
         return True
     if text.startswith("Traceback"):
         return True
+    # 退出成功时：启动瞬间 u2 连不上又重试成功，不应进 soft reasons
+    if exit_code in (0, None) and (
+        "无法连接 uiautomator2" in text
+        or "Unable to connect to uiautomator2" in text
+    ):
+        return True
     return False
 
 
 def sanitize_kea2_error_message(message, exit_code=0, violations=None):
     """将嘈杂/空错误替换为可读摘要。"""
-    if message and not is_noisy_kea2_error(message):
+    if message and not is_noisy_kea2_error(message, exit_code=exit_code):
         return str(message).strip()[:500]
     summary = summarize_property_violations(violations or [])
     if summary:

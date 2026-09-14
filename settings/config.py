@@ -92,7 +92,8 @@ class Config:
         self.SCENARIOS = self.DEFAULT_SCENARIOS
 
         self.PERF_CPU_THRESHOLD = float(os.environ.get("PERF_CPU_THRESHOLD", 80.0))
-        self.PERF_MEM_THRESHOLD = float(os.environ.get("PERF_MEM_THRESHOLD", 512.0))
+        # 512 对 S1Pro 稳态 PSS（约 450–540）过严，按 2026-09-14 实跑改为 550
+        self.PERF_MEM_THRESHOLD = float(os.environ.get("PERF_MEM_THRESHOLD", 550.0))
         self.PERF_FPS_THRESHOLD = float(os.environ.get("PERF_FPS_THRESHOLD", 30.0))
         self.PERF_MEM_LEAK_WINDOW = int(os.environ.get("PERF_MEM_LEAK_WINDOW", 10))
         self.PERF_MEM_LEAK_GROWTH = float(os.environ.get("PERF_MEM_LEAK_GROWTH", 20.0))
@@ -134,6 +135,12 @@ class Config:
                 self.MONKEY_MOTION_PERCENT = int(sec.get("MONKEY_MOTION_PERCENT", self.MONKEY_MOTION_PERCENT))
                 self.MONKEY_SYSKEYS_PERCENT = int(sec.get("MONKEY_SYSKEYS_PERCENT", self.MONKEY_SYSKEYS_PERCENT))
                 self.PERF_MONITOR_INTERVAL = float(sec.get("PERF_MONITOR_INTERVAL", self.PERF_MONITOR_INTERVAL))
+                if sec.get("PERF_MEM_THRESHOLD"):
+                    self.PERF_MEM_THRESHOLD = float(sec.get("PERF_MEM_THRESHOLD"))
+                if sec.get("PERF_CPU_THRESHOLD"):
+                    self.PERF_CPU_THRESHOLD = float(sec.get("PERF_CPU_THRESHOLD"))
+                if sec.get("PERF_FPS_THRESHOLD"):
+                    self.PERF_FPS_THRESHOLD = float(sec.get("PERF_FPS_THRESHOLD"))
                 if sec.get("TEST_ENGINE"):
                     self.TEST_ENGINE = sec.get("TEST_ENGINE", self.TEST_ENGINE).lower()
                 if sec.get("KEA2_RUNNING_MINUTES"):

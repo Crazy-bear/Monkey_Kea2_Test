@@ -205,10 +205,18 @@ def _parse_kea2_failure(combined, exit_code):
             "已在 Kea2 启动命令中指定 java.io.tmpdir=/data/local/tmp，请重新跑测。"
         )
     if "Unable to connect to uiautomator2 server" in combined:
-        return (
-            "无法连接 uiautomator2。请执行 python -m uiautomator2 init，"
-            "并确认设备未休眠、ATX 仍在运行。"
+        # 启动瞬间常见一次 retry；若已连上或退出码为 0，不算失败原因
+        recovered = (
+            exit_code == 0
+            or "Connected to fastbot server" in combined
+            or "// Monkey finished" in combined
+            or "Bug report saved" in combined
         )
+        if not recovered:
+            return (
+                "无法连接 uiautomator2。请执行 python -m uiautomator2 init，"
+                "并确认设备未休眠、ATX 仍在运行。"
+            )
     if "AdbError" in combined or "adbutils.errors.AdbError" in combined:
         return (
             "ADB push/pull 失败。若含 act-blacklist-file，"

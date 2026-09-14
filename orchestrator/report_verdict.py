@@ -13,9 +13,20 @@ MIN_PATH_SAMPLES_FOR_CRITICAL = 8
 
 
 def sanitize_performance_samples(rows: List[dict], thresholds: Optional[dict] = None) -> List[dict]:
-    """清洗性能样本：标记无效 FPS，避免假 fps_low。"""
+    """清洗性能样本：按当前阈值重算超标标记，并剔除无效 FPS 假卡顿。"""
     thr = thresholds or {}
     fps_thr = float(thr.get("fps") or 30.0)
+    cpu_thr = thr.get("cpu")
+    mem_thr = thr.get("mem")
+    try:
+        cpu_thr = float(cpu_thr) if cpu_thr is not None else None
+    except (TypeError, ValueError):
+        cpu_thr = None
+    try:
+        mem_thr = float(mem_thr) if mem_thr is not None else None
+    except (TypeError, ValueError):
+        mem_thr = None
+
     out = []
     for row in rows or []:
         r = dict(row)
@@ -30,11 +41,18 @@ def sanitize_performance_samples(rows: List[dict], thresholds: Optional[dict] = 
             r["fps_valid_value"] = None
         else:
             r["fps_valid_value"] = fps
-            # 仅有效 FPS 才参与低帧判定
-            if "fps_low" not in row or r.get("fps_low") is None:
-                r["fps_low"] = fps < fps_thr
-            elif fps >= fps_thr:
-                r["fps_low"] = False
+            r["fps_low"] = fps < fps_thr
+
+        if cpu_thr is not None:
+            try:
+                r["cpu_exceed"] = float(r.get("cpu") or 0) > cpu_thr
+            except (TypeError, ValueError):
+                r["cpu_exceed"] = False
+        if mem_thr is not None:
+            try:
+                r["mem_exceed"] = float(r.get("mem") or 0) > mem_thr
+            except (TypeError, ValueError):
+                r["mem_exceed"] = False
         out.append(r)
     return out
 
@@ -124,7 +142,7 @@ def compute_gate_status(report_data: dict) -> Dict[str, Any]:
             soft.append((summary or f"属性违反 {pv} 次") + "（哨兵抽检，建议模块锁复核）")
 
         err = (kea2.get("error_message") or "").strip()
-        if err and not is_noisy_kea2_error(err):
+        if err and not is_noisy_kea2_error(err, exit_code=code):
             blob = hard + soft
             if not any(err == r or err in r or r in err for r in blob):
                 if code in (2, 3, 4):

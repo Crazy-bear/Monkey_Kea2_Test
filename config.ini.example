@@ -21,6 +21,11 @@ SCENARIOS = all
 # 测试产出根目录（每次运行在 <OUTPUT_DIR>/<timestamp>/ 下）
 OUTPUT_DIR = outputs
 
+# 性能告警阈值（S1Pro 稳态 PSS 约 450–540，内存默认 550）
+# PERF_CPU_THRESHOLD = 80
+PERF_MEM_THRESHOLD = 550
+# PERF_FPS_THRESHOLD = 30
+
 # --- 可选：Monkey 冒烟 ---
 # EVENT_COUNT = 5000
 
