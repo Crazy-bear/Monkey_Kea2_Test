@@ -16,7 +16,16 @@ from performance.fps import FPSMonitor
 
 
 class PerformanceMonitor:
-    def __init__(self, device_id, package_name, output_dir, interval=None, config=None):
+    def __init__(
+        self,
+        device_id,
+        package_name,
+        output_dir,
+        interval=None,
+        config=None,
+        ui_context_file=None,
+        phase_file=None,
+    ):
         """
         初始化性能监控器
 
@@ -26,11 +35,15 @@ class PerformanceMonitor:
             output_dir: 输出目录
             interval: 监控间隔（秒），默认从 config 读取（3s）
             config: Config 实例，用于读取阈值与间隔
+            ui_context_file: CoverageSampler 写入的当前页上下文
+            phase_file: 跨进程属性 phase 文件（Kea2 子进程可写）
         """
         self.device_id = device_id
         self.package_name = package_name
         self.output_dir = output_dir
         self.config = config
+        self.ui_context_file = ui_context_file
+        self.phase_file = phase_file
         self.interval = interval
         if self.interval is None:
             self.interval = getattr(config, "PERF_MONITOR_INTERVAL", 3.0) if config else 3.0
@@ -68,11 +81,29 @@ class PerformanceMonitor:
         """设置当前业务阶段标签（供场景脚本调用）。"""
         with self._phase_lock:
             self._phase = name or "default"
+        if self.phase_file:
+            from orchestrator.perf_context import write_perf_phase
+
+            write_perf_phase(self.phase_file, self._phase)
         logger.debug(f"性能监控 phase -> {self._phase}")
 
     def get_phase(self):
+        if self.phase_file:
+            from orchestrator.perf_context import read_perf_phase
+
+            file_phase = read_perf_phase(self.phase_file)
+            if file_phase:
+                with self._phase_lock:
+                    self._phase = file_phase
         with self._phase_lock:
             return self._phase
+
+    def _current_ui_context(self):
+        if not self.ui_context_file:
+            return {}
+        from orchestrator.perf_context import read_ui_context
+
+        return read_ui_context(self.ui_context_file)
 
     def start(self):
         if self.is_running:
@@ -128,10 +159,17 @@ class PerformanceMonitor:
                 native_heap = mem_data.get("native_heap", 0.0)
                 graphics = mem_data.get("graphics", 0.0)
                 phase = self.get_phase()
+                ui = self._current_ui_context()
+                page = ui.get("page") or ""
+                activity = ui.get("activity") or ""
+                path = page or (activity.rsplit(".", 1)[-1] if activity else "未识别")
 
                 row = {
                     "timestamp": timestamp,
                     "phase": phase,
+                    "page": page,
+                    "activity": activity,
+                    "path": path,
                     "cpu": cpu,
                     "mem": mem_total,
                     "java_heap": java_heap,
@@ -146,7 +184,8 @@ class PerformanceMonitor:
 
                 if row["cpu_exceed"] or row["mem_exceed"] or row["fps_low"]:
                     logger.warning(
-                        f"性能阈值告警 phase={phase} CPU={cpu}% Mem={mem_total}MB FPS={fps}"
+                        f"性能阈值告警 path={path} phase={phase} "
+                        f"CPU={cpu}% Mem={mem_total}MB FPS={fps}"
                     )
             except Exception as e:
                 logger.error(f"监控过程中发生错误: {e}")
@@ -283,7 +322,8 @@ class PerformanceMonitor:
         summary_file = os.path.join(self.output_dir, f"performance_summary_{timestamp}.json")
 
         fieldnames = [
-            "timestamp", "phase", "cpu", "mem", "java_heap", "native_heap", "graphics", "fps",
+            "timestamp", "phase", "path", "page", "activity",
+            "cpu", "mem", "java_heap", "native_heap", "graphics", "fps",
             "cpu_exceed", "mem_exceed", "fps_low",
         ]
         try:

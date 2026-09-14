@@ -399,7 +399,7 @@ class ReportGenerator:
             <title>稳定性测试报告</title>
         </head>
         <body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:1200px;margin:0 auto;padding:20px;background-color:#f4f4f4;">
-            <h1 style="color:#2c3e50;text-align:center;border-bottom:2px solid #3498db;padding-bottom:10px;">力量镜稳定性测试报告</h1>
+            <h1 style="color:#2c3e50;text-align:center;border-bottom:2px solid #3498db;padding-bottom:10px;">【S1Pro 力量镜】稳定性测试报告</h1>
 
             <!-- 顶部统计卡片 -->
             <table width="100%" cellpadding="0" cellspacing="8" style="margin:20px 0;">
@@ -454,6 +454,9 @@ class ReportGenerator:
                     {% if data.scenarios %}
                     <tr><td style="font-weight:bold;padding:6px 0;">场景脚本:</td><td style="padding:6px 0;">{{ data.scenarios }}</td></tr>
                     {% endif %}
+                    {% if data.lock_modules %}
+                    <tr><td style="font-weight:bold;padding:6px 0;">模块锁:</td><td style="padding:6px 0;">{{ data.lock_modules | join(', ') }}</td></tr>
+                    {% endif %}
                     <tr><td style="font-weight:bold;padding:6px 0;">崩溃次数:</td><td style="padding:6px 0;">{{ data.crash_count }}</td></tr>
                     {% if data.gate_status and data.gate_status.reasons %}
                     <tr><td style="font-weight:bold;padding:6px 0;">门禁原因:</td><td style="padding:6px 0;">{{ data.gate_status.reasons | join('；') }}</td></tr>
@@ -465,7 +468,7 @@ class ReportGenerator:
             <div style="background-color:#fff;padding:20px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px;">
                 <h2 style="color:#34495e;margin-top:10px;border-left:4px solid #3498db;padding-left:10px;">Kea2 测试结果</h2>
                 <table style="width:100%;border-collapse:collapse;">
-                    <tr><td style="font-weight:bold;width:150px;padding:6px 0;">退出码:</td><td style="padding:6px 0;">{{ data.kea2.exit_code | default('N/A') }}</td></tr>
+                    <tr><td style="font-weight:bold;width:150px;padding:6px 0;">退出码:</td><td style="padding:6px 0;">{{ data.kea2.exit_code_label | default(data.kea2.exit_code | default('N/A')) }}</td></tr>
                     <tr><td style="font-weight:bold;padding:6px 0;">运行时长(分钟):</td><td style="padding:6px 0;">{{ data.kea2.running_minutes | default('N/A') }}</td></tr>
                     <tr><td style="font-weight:bold;padding:6px 0;">属性违反:</td><td style="padding:6px 0;">{{ data.kea2.property_violation_count | default(0) }} 次</td></tr>
                     <tr><td style="font-weight:bold;padding:6px 0;">Kea2 报告:</td><td style="padding:6px 0;">{{ data.kea2.report_path | default('未生成') }}</td></tr>
@@ -480,6 +483,65 @@ class ReportGenerator:
                     <li>{{ v.test | default('') }} — {{ v.message | default(v) }}</li>
                 {% endfor %}
                 </ul>
+                {% endif %}
+                {% if data.kea2.exploration %}
+                {% set exp = data.kea2.exploration %}
+                <h3 style="color:#34495e;margin-top:20px;">探索覆盖</h3>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+                    <tr>
+                        <td style="font-weight:bold;width:180px;padding:6px 0;">已测 Activity:</td>
+                        <td style="padding:6px 0;">
+                            {{ exp.tested_activities_count | default(0) }}
+                            {% if exp.total_activities_count %}/ {{ exp.total_activities_count }}{% endif %}
+                            {% if exp.coverage_percent is not none %}
+                            （覆盖率 {{ '%.2f'|format(exp.coverage_percent) }}%）
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:bold;padding:6px 0;">已识别业务页:</td>
+                        <td style="padding:6px 0;">
+                            {{ (exp.business_pages_seen or []) | length }} /
+                            {{ exp.business_pages_modeled_count | default(0) }}
+                            {% if exp.page_sample_count %}
+                            （采样 {{ exp.page_sample_count }} 次）
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if data.kea2.lock_modules %}
+                    <tr>
+                        <td style="font-weight:bold;padding:6px 0;">模块锁:</td>
+                        <td style="padding:6px 0;">{{ data.kea2.lock_modules | join(', ') }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+                {% if exp.business_pages_seen %}
+                <p style="margin:8px 0;"><strong>已命中业务页：</strong>{{ exp.business_pages_seen | join(', ') }}</p>
+                {% endif %}
+                {% if exp.business_pages_missed %}
+                <p style="margin:8px 0;color:#666;"><strong>未命中一二级页：</strong>{{ exp.business_pages_missed | join(', ') }}</p>
+                {% endif %}
+                {% if exp.activities_table %}
+                <h4 style="color:#34495e;">已测 Activity 明细</h4>
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                    <thead>
+                        <tr style="background:#f5f5f5;">
+                            <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">Activity</th>
+                            <th style="text-align:right;padding:6px;border-bottom:1px solid #ddd;width:80px;">次数</th>
+                            <th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">业务页</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in exp.activities_table %}
+                        <tr>
+                            <td style="padding:5px 6px;border-bottom:1px solid #eee;word-break:break-all;">{{ row.activity }}</td>
+                            <td style="padding:5px 6px;border-bottom:1px solid #eee;text-align:right;">{{ row.count }}</td>
+                            <td style="padding:5px 6px;border-bottom:1px solid #eee;">{{ (row.business_pages or []) | join(', ') }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% endif %}
                 {% endif %}
             </div>
             {% endif %}

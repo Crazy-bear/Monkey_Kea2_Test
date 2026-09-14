@@ -66,8 +66,10 @@ class FPSMonitor:
                 return 0.0
 
             fps = self._parse_fps(output)
-            if fps <= 0:
-                logger.warning(f"未找到应用 {self.package_name} 的 FPS 数据")
+            # <1 多为 gfxinfo 无帧占位（如 0.202…），调用方应视为无效采样
+            if fps < 1.0:
+                logger.debug(f"FPS 采样无效/无帧: {fps}")
+                return 0.0
             return fps
         except Exception as e:
             logger.error(f"获取 FPS 失败: {e}")
