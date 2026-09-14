@@ -33,23 +33,24 @@ class Config:
         "guide": "test_lifestyle.py",
         "suixinlian": "test_suixinlian.py",
         "course": "test_course.py",
-        "profile": "test_profile_plan.py",
         "plan": "test_programs.py",
         "programs": "test_programs.py",
         "assessment": "test_assessment.py",
         "ai_coach": "test_ai_coach.py",
         "aicoach": "test_ai_coach.py",
-        "schedule": "test_schedule.py",
-        "calendar": "test_schedule.py",
-        "control_panel": "test_control_panel.py",
-        "control": "test_control_panel.py",
-        "data_center": "test_data_center.py",
-        "datacenter": "test_data_center.py",
-        "effort": "test_data_center.py",
-        "floating_touch": "test_floating_touch.py",
-        "touch": "test_floating_touch.py",
-        "touch_menu": "test_floating_touch.py",
-        "settings": "test_settings.py",
+        # 哨兵已归档：映射到 lock_fence.py（非 test_*，all 不会 discover）
+        "profile": "lock_fence.py",
+        "schedule": "lock_fence.py",
+        "calendar": "lock_fence.py",
+        "control_panel": "lock_fence.py",
+        "control": "lock_fence.py",
+        "data_center": "lock_fence.py",
+        "datacenter": "lock_fence.py",
+        "effort": "lock_fence.py",
+        "floating_touch": "lock_fence.py",
+        "touch": "lock_fence.py",
+        "touch_menu": "lock_fence.py",
+        "settings": "lock_fence.py",
     }
 
     def __init__(self, profile=None, config_file=None, test_engine=None):
@@ -202,25 +203,58 @@ class Config:
         parser.read(config_file, encoding="utf-8")
         return list(parser.sections()) or [cls.DEFAULT_PROFILE]
 
+    @staticmethod
+    def _is_blank_version(value):
+        return value in (None, "", "N/A", "Unknown", "未知", "—")
+
+    def _get_app_version_via_adb(self):
+        """uiautomator2 不可用时，用 dumpsys package 解析 versionName。"""
+        try:
+            import re
+            from core.adb_client import ADBClient
+
+            adb = ADBClient(device_id=self.DEVICE_ID)
+            out = adb.shell("dumpsys", "package", self.PACKAGE_NAME, timeout=15) or ""
+            match = re.search(r"versionName=([^\s]+)", out)
+            if match:
+                return match.group(1).strip()
+        except Exception as e:
+            logger.error(f"ADB 获取应用版本失败: {e}")
+        return None
+
     def _get_app_info(self):
         """获取应用信息（懒加载，仅在有设备时调用）"""
+        version = None
         try:
             import uiautomator2 as u2
+
             d = u2.connect(self.DEVICE_ID)
-            device_info = d.app_info(self.PACKAGE_NAME)
-            self.device_version_name = device_info.get("versionName") or "Unknown"
-            logger.info(f"DeviceVersionName: {self.device_version_name}")
+            device_info = d.app_info(self.PACKAGE_NAME) or {}
+            version = device_info.get("versionName")
         except Exception as e:
-            logger.error(f"获取应用信息失败: {e}")
-            self.device_version_name = "Unknown"
+            logger.warning(f"uiautomator2 获取应用信息失败，尝试 ADB: {e}")
+
+        if self._is_blank_version(version):
+            version = self._get_app_version_via_adb()
+
+        self.device_version_name = version if not self._is_blank_version(version) else "Unknown"
+        logger.info(f"DeviceVersionName: {self.device_version_name}")
 
     def _get_firmware_version(self):
-        """通过 adb 获取主板固件版本（ro.build.display.id）"""
+        """通过 adb 获取主板固件版本（优先 ro.build.display.id）"""
         try:
             from core.adb_client import ADBClient
+
             adb = ADBClient(device_id=self.DEVICE_ID)
-            fw = adb.shell("getprop", "ro.build.display.id", timeout=10).strip()
-            return fw if fw else "Unknown"
+            for prop in (
+                "ro.build.display.id",
+                "ro.build.version.incremental",
+                "ro.product.build.version.incremental",
+            ):
+                fw = (adb.shell("getprop", prop, timeout=10) or "").strip()
+                if fw:
+                    return fw
+            return "Unknown"
         except Exception as e:
             logger.error(f"获取固件版本失败: {e}")
             return "Unknown"

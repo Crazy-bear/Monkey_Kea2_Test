@@ -1,4 +1,4 @@
-# 力量镜稳定性测试本地配置（复制为 config.ini 后修改）
+# 【S1Pro 力量镜】稳定性测试本地配置（复制为 config.ini 后修改）
 # 优先级：命令行参数 > 环境变量 > 本文件 > settings/config.py 默认值
 #
 #   cp config.ini.example config.ini   # Linux / macOS
