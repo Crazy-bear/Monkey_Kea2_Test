@@ -80,16 +80,27 @@ if [ -f "$REPORT_JSON" ]; then
     DURATION=$(_parse_json_field "$REPORT_JSON" "duration")
     TEST_ENGINE=$(_parse_json_field "$REPORT_JSON" "test_engine")
     GATE_PASSED=$(_parse_json_field "$REPORT_JSON" "gate_status.passed")
+    GATE_LEVEL=$(_parse_json_field "$REPORT_JSON" "gate_status.level")
     PROPERTY_VIOLATIONS=$(_parse_json_field "$REPORT_JSON" "kea2.property_violation_count")
     KEA2_EXIT_CODE=$(_parse_json_field "$REPORT_JSON" "kea2.exit_code")
+    if [ -z "$GATE_LEVEL" ]; then
+        if [ "$GATE_PASSED" = "true" ] || [ "$GATE_PASSED" = "True" ]; then GATE_LEVEL="pass"; else GATE_LEVEL="fail"; fi
+    fi
 
     REASONS_JSON=$(_parse_json_field "$REPORT_JSON" "gate_status.reasons")
     if [ -n "$REASONS_JSON" ] && [ "$REASONS_JSON" != "[]" ]; then
         GATE_REASONS=$(python3 - "$REPORT_JSON" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as f:
-    reasons = (json.load(f).get("gate_status") or {}).get("reasons") or []
-print("\\n".join(reasons))
+    g = (json.load(f).get("gate_status") or {})
+hard = g.get("reasons_hard") or []
+soft = g.get("reasons_soft") or []
+parts = []
+if hard:
+    parts.append("硬失败: " + "；".join(map(str, hard)))
+if soft:
+    parts.append("告警: " + "；".join(map(str, soft)))
+print("\n".join(parts) if parts else "\n".join(map(str, g.get("reasons") or [])))
 PY
 )
     fi
@@ -116,19 +127,26 @@ echo "崩溃次数: $CRASH_COUNT"
 echo "属性违反: $PROPERTY_VIOLATIONS"
 echo "Kea2 退出码: $KEA2_EXIT_CODE"
 echo "门禁通过: $GATE_PASSED"
+echo "门禁级别: ${GATE_LEVEL:-unknown}"
 echo "应用版本: $APP_VERSION"
 
 echo "===== 发送飞书通知 ====="
 
-if [ "$GATE_PASSED" = "True" ] || [ "$GATE_PASSED" = "true" ]; then
-    TEST_STATUS="✅ 通过"
-    CARD_COLOR="green"
-else
+if [ "$GATE_LEVEL" = "fail" ]; then
     TEST_STATUS="❌ 失败"
     CARD_COLOR="red"
     if [ -n "$GATE_REASONS" ]; then
         TEST_STATUS="❌ 失败（${GATE_REASONS//$'\n'/；}）"
     fi
+elif [ "$GATE_LEVEL" = "warn" ]; then
+    TEST_STATUS="⚠️ 告警"
+    CARD_COLOR="orange"
+    if [ -n "$GATE_REASONS" ]; then
+        TEST_STATUS="⚠️ 告警（${GATE_REASONS//$'\n'/；}）"
+    fi
+else
+    TEST_STATUS="✅ 通过"
+    CARD_COLOR="green"
 fi
 
 EXEC_LABEL="${RUNNING_MINUTES:-N/A} 分钟"
@@ -143,7 +161,7 @@ JSON=$(cat <<EOF
     "header": {
       "title": {
         "tag": "plain_text",
-        "content": "力量镜稳定性测试报告 (${TEST_ENGINE})"
+        "content": "【S1Pro 力量镜】稳定性测试报告 (${TEST_ENGINE})"
       },
       "template": "${CARD_COLOR}"
     },
@@ -223,10 +241,10 @@ done
 
 echo ""
 echo "===== Jenkins 门禁 ====="
-if [ "$GATE_PASSED" = "True" ] || [ "$GATE_PASSED" = "true" ]; then
-    echo "门禁通过"
-    exit 0
-else
-    echo "门禁失败"
+# 仅 level=fail（Crash/运行失败）拦截；warn（属性哨兵等）放行但飞书已标黄
+if [ "$GATE_LEVEL" = "fail" ]; then
+    echo "门禁失败（硬失败）"
     exit 1
 fi
+echo "门禁通过（level=${GATE_LEVEL:-pass}）"
+exit 0
